@@ -1,0 +1,8 @@
+{
+  "name": "Remix: New Horizons Training Operations Portal",
+  "description": "Comprehensive operations portal for New Horizons Computer Learning Centers, combining the Student Pulse Survey and Instructor Portal with course progress tracking and administration analytics.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
