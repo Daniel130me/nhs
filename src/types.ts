@@ -8,6 +8,7 @@ export interface Instructor {
   center: string;
   courses: string[];
   role: 'Instructor' | 'Admin';
+  status?: 'Active' | 'Deactivated';
   createdAt: string;
 }
 

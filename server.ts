@@ -1,12 +1,91 @@
 import express from "express";
 import path from "path";
+import crypto from "crypto";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
+import { z } from "zod";
 import { initDb, query } from "./src/db";
 import { uploadFile } from "./src/storage";
 
 dotenv.config();
+
+// --- Input Validation Schemas ---
+const loginSchema = z.object({
+  email: z.string().email("Invalid email format").min(1, "Email is required"),
+  password: z.string().min(1, "Password is required"),
+});
+
+const registerSchema = z.object({
+  firstName: z.string().min(1, "First name is required"),
+  lastName: z.string().min(1, "Last name is required"),
+  email: z.string().email("Invalid email format"),
+  password: z.string().min(6, "Password must be at least 6 characters long"),
+  gender: z.string().optional(),
+  center: z.string().optional(),
+  courses: z.array(z.string()).optional(),
+  role: z.enum(["Instructor", "Admin"]),
+});
+
+const changePasswordSchema = z.object({
+  instructorId: z.string().min(1, "Instructor ID is required"),
+  currentPassword: z.string().min(1, "Current password is required"),
+  newPassword: z.string().min(6, "New password must be at least 6 characters long"),
+});
+
+const surveySchema = z.object({
+  weekEnding: z.string().optional().nullable(),
+  courseName: z.string().min(1, "Course name is required"),
+  center: z.string().min(1, "Center is required"),
+  studentName: z.string().optional().nullable(),
+  anonymous: z.boolean().optional().default(false),
+  pace: z.number().optional().default(3),
+  clarity: z.number().optional().default(3),
+  keepUp: z.number().optional().default(3),
+  questionsAnswered: z.string().optional().nullable(),
+  materialsClear: z.number().optional().default(3),
+  materialsOnTime: z.string().optional().nullable(),
+  exercisesMatched: z.string().optional().nullable(),
+  labSufficient: z.number().nullable().optional(),
+  toolsWorked: z.string().optional().nullable(),
+  couldComplete: z.string().optional().nullable(),
+  hadIssue: z.enum(["Yes", "No"]).optional().default("No"),
+  issueCategories: z.array(z.string()).optional().default([]),
+  severity: z.string().optional().nullable(),
+  issueDescription: z.string().optional().nullable(),
+  repeatIssue: z.string().optional().nullable(),
+  overallSatisfaction: z.number().optional().default(3),
+  confidence: z.number().optional().default(3),
+  additionalComments: z.string().optional().nullable()
+});
+
+const classSchema = z.object({
+  courseName: z.string().min(1, "Course syllabus is required"),
+  instructorId: z.string().min(1, "Instructor ID is required"),
+  instructorName: z.string().min(1, "Instructor name is required"),
+  classroom: z.string().min(1, "Classroom/Lab ID is required"),
+  totalDurationHours: z.number().min(1, "Total duration must be greater than zero"),
+  scheduleType: z.enum(["Weekday", "Weekend", "Fast-track", "Online"]),
+  timeSlot: z.enum(["Morning", "Afternoon"]),
+  startDate: z.string().min(1, "Start date is required"),
+  endDate: z.string().min(1, "End date is required"),
+  days: z.array(z.string()).optional().default([]),
+  modules: z.array(z.object({
+    id: z.string(),
+    name: z.string(),
+    done: z.boolean()
+  })).optional().default([]),
+  status: z.enum(["Active", "Completed", "Paused"]).optional().default("Active")
+});
+
+const weeklyLogSchema = z.object({
+  classId: z.string().min(1, "Class ID is required"),
+  weekNumber: z.number().min(1, "Week number is required"),
+  hoursLogged: z.number().min(1, "Hours logged must be greater than 0"),
+  modulesCoveredThisWeek: z.array(z.string()).optional().default([]),
+  challenges: z.string().optional().default(""),
+  instructorId: z.string().min(1, "Instructor ID is required"),
+});
 
 // Initialize the Gemini SDK server-side
 const apiKey = process.env.GEMINI_API_KEY;
@@ -31,12 +110,20 @@ app.use("/uploads", express.static(path.join(process.cwd(), "public", "uploads")
 // DATABASE API ENDPOINTS
 // ----------------------------------------------------
 
+// --- Secure Hashing Helper ---
+function getSha256(pwd: string): string {
+  return crypto.createHash("sha256").update(pwd).digest("hex");
+}
+
 // --- Auth Endpoints ---
 app.post("/api/auth/login", async (req, res) => {
-  const { email, password } = req.body;
-  if (!email || !password) {
-    return res.status(400).json({ error: "Email and password are required" });
+  const validationResult = loginSchema.safeParse(req.body);
+  if (!validationResult.success) {
+    const errorMsg = validationResult.error.issues.map(e => e.message).join(", ");
+    return res.status(400).json({ error: errorMsg });
   }
+  const { email, password } = validationResult.data;
+
   try {
     const instructors = await query(
       "SELECT * FROM instructors WHERE LOWER(email) = LOWER($1)",
@@ -45,8 +132,26 @@ app.post("/api/auth/login", async (req, res) => {
     if (instructors.length > 0) {
       const inst = instructors[0];
       const savedPassword = inst.password || 'password123';
-      if (savedPassword !== password) {
+      const inputHashed = getSha256(password);
+
+      // Verify either raw password matches (for un-migrated seed accounts) or hashed password matches
+      if (savedPassword !== password && savedPassword !== inputHashed) {
         return res.status(401).json({ error: "Invalid password" });
+      }
+
+      // If it matched as plain, auto-migrate to hashed on successful login
+      if (savedPassword === password && password !== inputHashed) {
+        try {
+          await query("UPDATE instructors SET password = $1 WHERE id = $2", [inputHashed, inst.id]);
+          console.log(`[Auth Security] Auto-upgraded password hash for instructor ${inst.email}`);
+        } catch (dbErr) {
+          console.error("Failed to auto-upgrade password to hash:", dbErr);
+        }
+      }
+
+      const status = inst.status || 'Active';
+      if (status === 'Deactivated') {
+        return res.status(403).json({ error: "Your account has been deactivated. Please contact an Administrator." });
       }
 
       // Return with frontend-expected camelCase names
@@ -59,6 +164,7 @@ app.post("/api/auth/login", async (req, res) => {
         center: inst.center,
         courses: inst.courses,
         role: inst.role,
+        status: status,
         createdAt: inst.created_at
       });
     }
@@ -70,14 +176,17 @@ app.post("/api/auth/login", async (req, res) => {
 });
 
 app.post("/api/auth/register", async (req, res) => {
-  const { firstName, lastName, email, password, gender, center, courses, role } = req.body;
-  if (!firstName || !lastName || !email || !password || !role) {
-    return res.status(400).json({ error: "Required fields missing for registration (ensure password is provided)" });
+  const validationResult = registerSchema.safeParse(req.body);
+  if (!validationResult.success) {
+    const errorMsg = validationResult.error.issues.map(e => e.message).join(", ");
+    return res.status(400).json({ error: errorMsg });
   }
+  const { firstName, lastName, email, password, gender, center, courses, role } = validationResult.data;
 
   try {
     const id = `inst-${Date.now()}`;
     const createdAt = new Date().toISOString();
+    const hashedPassword = getSha256(password);
     
     await query(
       `INSERT INTO instructors (id, first_name, last_name, email, password, gender, center, courses, role, created_at)
@@ -87,7 +196,7 @@ app.post("/api/auth/register", async (req, res) => {
         firstName,
         lastName,
         email.trim(),
-        password,
+        hashedPassword,
         gender || "",
         center || "",
         JSON.stringify(courses || []),
@@ -105,6 +214,7 @@ app.post("/api/auth/register", async (req, res) => {
       center,
       courses,
       role,
+      status: 'Active',
       createdAt
     });
   } catch (err: any) {
@@ -112,6 +222,38 @@ app.post("/api/auth/register", async (req, res) => {
     if (err.code === "23505" || err.message?.includes("unique constraint")) {
       return res.status(409).json({ error: "An instructor with this email is already registered." });
     }
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/auth/change-password", async (req, res) => {
+  const validationResult = changePasswordSchema.safeParse(req.body);
+  if (!validationResult.success) {
+    const errorMsg = validationResult.error.issues.map(e => e.message).join(", ");
+    return res.status(400).json({ error: errorMsg });
+  }
+  const { instructorId, currentPassword, newPassword } = validationResult.data;
+
+  try {
+    const instructors = await query("SELECT * FROM instructors WHERE id = $1", [instructorId]);
+    if (instructors.length === 0) {
+      return res.status(404).json({ error: "Instructor profile not found" });
+    }
+
+    const inst = instructors[0];
+    const savedPassword = inst.password || 'password123';
+    const currentInputHashed = getSha256(currentPassword);
+
+    if (savedPassword !== currentPassword && savedPassword !== currentInputHashed) {
+      return res.status(401).json({ error: "Current password verification failed" });
+    }
+
+    const newHashed = getSha256(newPassword);
+    await query("UPDATE instructors SET password = $1 WHERE id = $2", [newHashed, instructorId]);
+    
+    res.json({ success: true, message: "Password updated securely" });
+  } catch (err: any) {
+    console.error("Change password failed:", err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -129,10 +271,27 @@ app.get("/api/instructors", async (req, res) => {
       center: inst.center,
       courses: inst.courses,
       role: inst.role,
+      status: inst.status || 'Active',
       createdAt: inst.created_at
     }));
     res.json(formatted);
   } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put("/api/instructors/:id/status", async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
+  if (status !== 'Active' && status !== 'Deactivated') {
+    return res.status(400).json({ error: "Invalid status value (must be Active or Deactivated)" });
+  }
+
+  try {
+    await query("UPDATE instructors SET status = $1 WHERE id = $2", [status, id]);
+    res.json({ success: true, message: `Instructor status updated to ${status} successfully` });
+  } catch (err: any) {
+    console.error("Failed to update instructor status:", err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -164,8 +323,12 @@ app.get("/api/classes", async (req, res) => {
 });
 
 app.post("/api/classes", async (req, res) => {
+  const validationResult = classSchema.safeParse(req.body);
+  if (!validationResult.success) {
+    const errorMsg = validationResult.error.issues.map(e => e.message).join(", ");
+    return res.status(400).json({ error: errorMsg });
+  }
   const {
-    id,
     courseName,
     instructorId,
     instructorName,
@@ -178,13 +341,9 @@ app.post("/api/classes", async (req, res) => {
     endDate,
     modules,
     status
-  } = req.body;
+  } = validationResult.data;
 
-  if (!courseName || !instructorId || !instructorName) {
-    return res.status(400).json({ error: "Missing key parameters for class creation" });
-  }
-
-  const classId = id || `class-${Date.now()}`;
+  const classId = req.body.id || `class-${Date.now()}`;
   const createdAt = new Date().toISOString();
 
   try {
@@ -309,12 +468,14 @@ app.get("/api/logs", async (req, res) => {
 });
 
 app.post("/api/logs", async (req, res) => {
-  const { id, classId, weekNumber, hoursLogged, modulesCoveredThisWeek, challenges, instructorId } = req.body;
-  if (!classId || !weekNumber || !instructorId) {
-    return res.status(400).json({ error: "Required fields missing for log submission" });
+  const validationResult = weeklyLogSchema.safeParse(req.body);
+  if (!validationResult.success) {
+    const errorMsg = validationResult.error.issues.map(e => e.message).join(", ");
+    return res.status(400).json({ error: errorMsg });
   }
+  const { classId, weekNumber, hoursLogged, modulesCoveredThisWeek, challenges, instructorId } = validationResult.data;
 
-  const logId = id || `log-${Date.now()}`;
+  const logId = req.body.id || `log-${Date.now()}`;
   const submittedAt = new Date().toISOString();
 
   try {
@@ -387,18 +548,19 @@ app.get("/api/surveys", async (req, res) => {
 });
 
 app.post("/api/surveys", async (req, res) => {
+  const validationResult = surveySchema.safeParse(req.body);
+  if (!validationResult.success) {
+    const errorMsg = validationResult.error.issues.map(e => e.message).join(", ");
+    return res.status(400).json({ error: errorMsg });
+  }
   const {
-    id, weekEnding, courseName, center, studentName, anonymous, pace, clarity, keepUp,
+    weekEnding, courseName, center, studentName, anonymous, pace, clarity, keepUp,
     questionsAnswered, materialsClear, materialsOnTime, exercisesMatched, labSufficient,
     toolsWorked, couldComplete, hadIssue, issueCategories, severity, issueDescription,
     repeatIssue, overallSatisfaction, confidence, additionalComments
-  } = req.body;
+  } = validationResult.data;
 
-  if (!courseName || !center) {
-    return res.status(400).json({ error: "courseName and center are required" });
-  }
-
-  const srvId = id || `survey-${Date.now()}`;
+  const srvId = req.body.id || `survey-${Date.now()}`;
   const submittedAt = new Date().toISOString();
 
   try {

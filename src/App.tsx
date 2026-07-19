@@ -501,6 +501,25 @@ export default function App() {
     }
   };
 
+  const handleUpdateInstructorStatus = async (id: string, newStatus: 'Active' | 'Deactivated') => {
+    setInstructors((prev) =>
+      prev.map((inst) => (inst.id === id ? { ...inst, status: newStatus } : inst))
+    );
+
+    try {
+      const response = await fetch(`/api/instructors/${id}/status`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus })
+      });
+      if (!response.ok) {
+        throw new Error("Failed to update status on server");
+      }
+    } catch (err) {
+      console.error("Failed to update instructor status in database:", err);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans flex flex-col antialiased">
       {/* GLOBAL BANNER HEADER */}
@@ -629,6 +648,7 @@ export default function App() {
                       onCreateCourseRich={handleCreateCourseRich}
                       onEditCourseRich={handleEditCourseRich}
                       onDeleteCourseRich={handleDeleteCourseRich}
+                      onUpdateInstructorStatus={handleUpdateInstructorStatus}
                     />
                   </div>
                 ) : (

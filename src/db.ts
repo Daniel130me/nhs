@@ -61,6 +61,12 @@ export async function initDb() {
       await query(`
         UPDATE instructors SET password = 'password123' WHERE password IS NULL;
       `);
+      await query(`
+        ALTER TABLE instructors ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'Active';
+      `);
+      await query(`
+        UPDATE instructors SET status = 'Active' WHERE status IS NULL;
+      `);
     } catch (err) {
       console.warn("Could not execute instructor table migrations:", err);
     }

@@ -85,8 +85,8 @@ export default function InstructorPortal({
   const [regCenter, setRegCenter] = useState('');
   const [regSelectedCourses, setRegSelectedCourses] = useState<string[]>([]);
 
-  // Workspace sub-tabs: 'classes' | 'curriculum' | 'competency'
-  const [portalTab, setPortalTab] = useState<'classes' | 'curriculum' | 'competency'>('classes');
+  // Workspace sub-tabs: 'classes' | 'curriculum' | 'competency' | 'settings'
+  const [portalTab, setPortalTab] = useState<'classes' | 'curriculum' | 'competency' | 'settings'>('classes');
 
   // Class Setup states
   const [showAddClass, setShowAddClass] = useState(false);
@@ -104,6 +104,14 @@ export default function InstructorPortal({
   const [newModulesText, setNewModulesText] = useState('');
   const [classSetupError, setClassSetupError] = useState('');
   const [classSuccessMessage, setClassSuccessMessage] = useState('');
+
+  // Settings & Security form states
+  const [currentPasswordChange, setCurrentPasswordChange] = useState('');
+  const [newPasswordChange, setNewPasswordChange] = useState('');
+  const [confirmPasswordChange, setConfirmPasswordChange] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [passwordSuccess, setPasswordSuccess] = useState('');
+  const [isPasswordLoading, setIsPasswordLoading] = useState(false);
 
   // Weekly Log states
   const [selectedClassForLog, setSelectedClassForLog] = useState<Class | null>(null);
@@ -209,6 +217,52 @@ export default function InstructorPortal({
       setLoginError(err.message || 'Registration failed. Please try again.');
     } finally {
       setIsAuthLoading(false);
+    }
+  };
+
+  const handleChangePasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentPasswordChange || !newPasswordChange || !confirmPasswordChange) {
+      setPasswordError('Please fill in all password fields.');
+      return;
+    }
+    if (newPasswordChange !== confirmPasswordChange) {
+      setPasswordError('New passwords do not match.');
+      return;
+    }
+    if (newPasswordChange.length < 6) {
+      setPasswordError('New password must be at least 6 characters long.');
+      return;
+    }
+
+    setIsPasswordLoading(true);
+    setPasswordError('');
+    setPasswordSuccess('');
+
+    try {
+      const response = await fetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          instructorId: currentInstructor?.id,
+          currentPassword: currentPasswordChange,
+          newPassword: newPasswordChange
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to update password');
+      }
+
+      setPasswordSuccess('Password securely updated successfully!');
+      setCurrentPasswordChange('');
+      setNewPasswordChange('');
+      setConfirmPasswordChange('');
+    } catch (err: any) {
+      setPasswordError(err.message || 'An error occurred while changing your password.');
+    } finally {
+      setIsPasswordLoading(false);
     }
   };
 
@@ -837,6 +891,14 @@ export default function InstructorPortal({
             }`}
           >
             AI Evaluations
+          </button>
+          <button
+            onClick={() => setPortalTab('settings')}
+            className={`flex-1 md:flex-initial px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+              portalTab === 'settings' ? 'bg-slate-900 text-white shadow' : 'text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            Settings & Security
           </button>
         </div>
 
@@ -1472,7 +1534,6 @@ export default function InstructorPortal({
                               src={activeResource.url}
                               controls
                               className="w-full h-64 object-contain"
-                              referrerPolicy="no-referrer"
                             />
                           </div>
                         ) : (
@@ -1832,6 +1893,121 @@ export default function InstructorPortal({
                 </motion.div>
               )}
             </AnimatePresence>
+          </motion.div>
+        )}
+
+        {portalTab === 'settings' && (
+          <motion.div
+            key="workspace-settings"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-fade-in"
+          >
+            {/* PROFILE CARD */}
+            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4 h-fit">
+              <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
+                <div className="w-12 h-12 bg-red-50 border border-red-100 rounded-xl flex items-center justify-center text-red-600 font-extrabold text-sm uppercase">
+                  {currentInstructor.firstName[0] || 'I'}{currentInstructor.lastName[0] || 'N'}
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-slate-900">{currentInstructor.firstName} {currentInstructor.lastName}</h4>
+                  <p className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">{currentInstructor.role}</p>
+                </div>
+              </div>
+              <div className="space-y-3 text-xs text-slate-600">
+                <div className="flex justify-between items-center">
+                  <span className="font-medium text-slate-400">Center Email:</span>
+                  <span className="font-semibold text-slate-800 break-all pl-2 text-right">{currentInstructor.email}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="font-medium text-slate-400">Gender:</span>
+                  <span className="font-semibold text-slate-800">{currentInstructor.gender}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="font-medium text-slate-400">Base Center:</span>
+                  <span className="font-semibold text-slate-800">{currentInstructor.center}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* PASSWORD UPDATE CARD */}
+            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm md:col-span-2 space-y-4">
+              <div>
+                <h4 className="text-sm font-bold text-slate-900">Change Portal Password</h4>
+                <p className="text-[10px] text-slate-400">Update your account credentials to keep your portal workspace secure.</p>
+              </div>
+
+              {passwordError && (
+                <div className="p-3 bg-red-50 border border-red-200 text-red-800 rounded-lg text-xs flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+                  <span>{passwordError}</span>
+                </div>
+              )}
+
+              {passwordSuccess && (
+                <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg text-xs flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                  <span>{passwordSuccess}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleChangePasswordSubmit} className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="sm:col-span-2">
+                    <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">Current Password</label>
+                    <input
+                      type="password"
+                      required
+                      value={currentPasswordChange}
+                      onChange={(e) => setCurrentPasswordChange(e.target.value)}
+                      placeholder="••••••••"
+                      className="w-full p-2.5 border border-slate-300 rounded-lg text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">New Password</label>
+                    <input
+                      type="password"
+                      required
+                      value={newPasswordChange}
+                      onChange={(e) => setNewPasswordChange(e.target.value)}
+                      placeholder="Min 6 characters"
+                      className="w-full p-2.5 border border-slate-300 rounded-lg text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">Confirm New Password</label>
+                    <input
+                      type="password"
+                      required
+                      value={confirmPasswordChange}
+                      onChange={(e) => setConfirmPasswordChange(e.target.value)}
+                      placeholder="••••••••"
+                      className="w-full p-2.5 border border-slate-300 rounded-lg text-xs"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-2">
+                  <button
+                    type="submit"
+                    disabled={isPasswordLoading}
+                    className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 text-white font-bold text-xs rounded-lg shadow cursor-pointer transition-all flex items-center gap-1.5"
+                  >
+                    {isPasswordLoading ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" /> Updating...
+                      </>
+                    ) : (
+                      <>
+                        <Lock className="w-3.5 h-3.5" /> Securely Change Password
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

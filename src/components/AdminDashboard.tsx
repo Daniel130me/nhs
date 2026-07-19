@@ -53,6 +53,7 @@ interface AdminDashboardProps {
   onCreateCourseRich: (newCourse: Course) => void;
   onEditCourseRich: (updatedCourse: Course) => void;
   onDeleteCourseRich: (courseId: string) => void;
+  onUpdateInstructorStatus?: (id: string, status: 'Active' | 'Deactivated') => void;
 }
 
 export default function AdminDashboard({
@@ -70,7 +71,8 @@ export default function AdminDashboard({
   onDeleteClass,
   onCreateCourseRich,
   onEditCourseRich,
-  onDeleteCourseRich
+  onDeleteCourseRich,
+  onUpdateInstructorStatus
 }: AdminDashboardProps) {
   // Config manager inputs
   const [newCenter, setNewCenter] = useState('');
@@ -147,15 +149,105 @@ export default function AdminDashboard({
     const instLogs = logs.filter((l) => l.instructorId === inst.id);
     const totalHours = instLogs.reduce((sum, l) => sum + l.hoursLogged, 0);
     return {
+      id: inst.id,
       name: `${inst.firstName} ${inst.lastName}`,
       email: inst.email,
       center: inst.center,
       classCount: instClasses.length,
-      hours: totalHours
+      hours: totalHours,
+      status: inst.status || 'Active'
     };
   });
 
   // ---- GENERAL HANDLERS ----
+  const exportSurveysToCsv = () => {
+    if (filteredSurveys.length === 0) return;
+    
+    const headers = [
+      "ID", "Date", "Course", "Center", "Student Name", "Anonymous",
+      "Pace (1-5)", "Clarity (1-5)", "Keep Up (1-5)", "Questions Answered",
+      "Materials Clear (1-5)", "Materials On Time", "Exercises Matched",
+      "Lab Sufficient", "Tools Worked", "Could Complete", "Had Issue",
+      "Severity"
+    ];
+
+    const rows = filteredSurveys.map(s => [
+      s.id,
+      s.weekEnding,
+      s.courseName,
+      s.center,
+      s.anonymous ? "Anonymous" : s.studentName,
+      s.anonymous ? "Yes" : "No",
+      s.pace,
+      s.clarity,
+      s.keepUp,
+      (s.questionsAnswered || "").replace(/\n/g, " "),
+      s.materialsClear,
+      s.materialsOnTime || "",
+      s.exercisesMatched || "",
+      s.labSufficient || "",
+      s.toolsWorked || "",
+      s.couldComplete || "",
+      s.hadIssue,
+      s.severity || "None"
+    ]);
+
+    const csvContent = [
+      headers.join(","),
+      ...rows.map(row => row.map(val => `"${String(val).replace(/"/g, '""')}"`).join(","))
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Student_Surveys_Export_${new Date().toISOString().slice(0,10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const exportLogsToCsv = () => {
+    if (logs.length === 0) return;
+
+    const headers = [
+      "Log ID", "Class ID", "Course", "Instructor Name", "Week Number",
+      "Hours Logged", "Modules Covered Count", "Modules Covered IDs", "Challenges Logged", "Submitted At"
+    ];
+
+    const rows = logs.map(log => {
+      const matchedClass = classes.find((c) => c.id === log.classId);
+      const instructorObj = instructors.find(i => i.id === log.instructorId);
+      const instructorName = instructorObj ? `${instructorObj.firstName} ${instructorObj.lastName}` : "Instructor";
+      return [
+        log.id,
+        log.classId,
+        matchedClass ? matchedClass.courseName : "Unknown",
+        instructorName,
+        log.weekNumber,
+        log.hoursLogged,
+        log.modulesCoveredThisWeek.length,
+        log.modulesCoveredThisWeek.join("; "),
+        (log.challenges || "").replace(/\n/g, " "),
+        log.submittedAt
+      ];
+    });
+
+    const csvContent = [
+      headers.join(","),
+      ...rows.map(row => row.map(val => `"${String(val).replace(/"/g, '""')}"`).join(","))
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Instructor_Logs_Export_${new Date().toISOString().slice(0,10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const handleCreateCenter = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCenter.trim()) return;
@@ -609,12 +701,38 @@ export default function AdminDashboard({
 
               <div className="divide-y divide-slate-100">
                 {instructorHoursBreakdown.map((instructor) => (
-                  <div key={instructor.email} className="py-4 first:pt-0 last:pb-0 flex justify-between items-center">
-                    <div>
-                      <h4 className="font-bold text-slate-800 text-xs">{instructor.name}</h4>
-                      <p className="text-[10px] text-slate-400 mt-0.5">{instructor.center} | {instructor.classCount} classes</p>
+                  <div key={instructor.email} className="py-4 first:pt-0 last:pb-0 flex justify-between items-center gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h4 className="font-bold text-slate-800 text-xs truncate">{instructor.name}</h4>
+                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
+                          instructor.status === 'Active'
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                            : 'bg-slate-100 text-slate-500 border border-slate-200'
+                        }`}>
+                          {instructor.status}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-0.5 truncate">{instructor.center} | {instructor.classCount} classes</p>
+                      
+                      {/* Secure Status Toggle Button */}
+                      {onUpdateInstructorStatus && (
+                        <button
+                          onClick={() => {
+                            const newStatus = instructor.status === 'Active' ? 'Deactivated' : 'Active';
+                            if (confirm(`Are you sure you want to set ${instructor.name} to ${newStatus}?`)) {
+                              onUpdateInstructorStatus(instructor.id, newStatus);
+                            }
+                          }}
+                          className={`text-[9px] font-extrabold mt-1 uppercase cursor-pointer hover:underline transition-all ${
+                            instructor.status === 'Active' ? 'text-red-600 hover:text-red-500' : 'text-emerald-600 hover:text-emerald-500'
+                          }`}
+                        >
+                          {instructor.status === 'Active' ? 'Deactivate Account' : 'Activate Account'}
+                        </button>
+                      )}
                     </div>
-                    <div className="text-right">
+                    <div className="text-right shrink-0">
                       <span className="block font-extrabold font-display text-slate-900 text-sm">{instructor.hours} hrs</span>
                       <span className="text-[9px] text-slate-400 block mt-0.5">Logged Duration</span>
                     </div>
@@ -635,10 +753,20 @@ export default function AdminDashboard({
             className="space-y-6"
           >
             {/* Filters Toolbar */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
-              <div className="flex items-center gap-2 text-slate-800">
-                <Filter className="w-4 h-4 text-slate-500" />
-                <h4 className="font-bold text-xs uppercase tracking-wider">Search & Filters</h4>
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4 animate-fade-in">
+              <div className="flex justify-between items-center text-slate-800">
+                <div className="flex items-center gap-2">
+                  <Filter className="w-4 h-4 text-slate-500" />
+                  <h4 className="font-bold text-xs uppercase tracking-wider">Search & Filters</h4>
+                </div>
+                <button
+                  onClick={exportSurveysToCsv}
+                  disabled={filteredSurveys.length === 0}
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                  title="Export matching surveys as CSV"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5" /> Export filtered to CSV
+                </button>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -832,9 +960,19 @@ export default function AdminDashboard({
             className="space-y-6"
           >
             <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
-              <div>
-                <h3 className="font-bold font-display text-slate-900 text-sm">Instructor Classroom Compliance Audits</h3>
-                <p className="text-slate-500 text-xs">Review formal self-reported logs mapping classroom durations, covered modules, and challenges</p>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+                <div>
+                  <h3 className="font-bold font-display text-slate-900 text-sm">Instructor Classroom Compliance Audits</h3>
+                  <p className="text-slate-500 text-xs">Review formal self-reported logs mapping classroom durations, covered modules, and challenges</p>
+                </div>
+                <button
+                  onClick={exportLogsToCsv}
+                  disabled={logs.length === 0}
+                  className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                  title="Export all compliance logs to CSV"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5" /> Export Logs to CSV
+                </button>
               </div>
 
               {logs.length === 0 ? (
