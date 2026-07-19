@@ -45,7 +45,7 @@ interface InstructorPortalProps {
   currentInstructor: Instructor | null;
   onLogin: (email: string, password?: string) => Promise<boolean>;
   onLogout: () => void;
-  onRegister: (instructor: Omit<Instructor, 'id' | 'createdAt'>) => Promise<void>;
+  onRegister: (instructor: Omit<Instructor, 'id' | 'createdAt'>) => Promise<Instructor>;
   onCreateClass: (cls: Omit<Class, 'id' | 'instructorId' | 'instructorName' | 'createdAt'>) => void;
   onEditClass: (cls: Class) => void;
   onDeleteClass: (classId: string) => void;
@@ -76,6 +76,7 @@ export default function InstructorPortal({
   const [isRegistering, setIsRegistering] = useState(false);
   const [isAuthLoading, setIsAuthLoading] = useState(false);
   const [isAdminAuthMode, setIsAdminAuthMode] = useState(false);
+  const [registrationSuccess, setRegistrationSuccess] = useState('');
 
   // Registration states
   const [regFirstName, setRegFirstName] = useState('');
@@ -164,6 +165,7 @@ export default function InstructorPortal({
     }
     setIsAuthLoading(true);
     setLoginError('');
+    setRegistrationSuccess('');
     try {
       const success = await onLogin(emailInput.trim().toLowerCase(), passwordInput);
       if (!success) {
@@ -182,7 +184,7 @@ export default function InstructorPortal({
 
   const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!regFirstName.trim() || !regLastName.trim() || !regEmail.trim() || !regPassword || !regCenter) {
+    if (!regFirstName.trim() || !regLastName.trim() || !regEmail.trim() || !regPassword || (!isAdminAuthMode && !regCenter)) {
       setLoginError('Please fill in all registration fields including password.');
       return;
     }
@@ -193,14 +195,15 @@ export default function InstructorPortal({
 
     setIsAuthLoading(true);
     setLoginError('');
+    setRegistrationSuccess('');
     try {
-      await onRegister({
+      const registered = await onRegister({
         firstName: regFirstName.trim(),
         lastName: regLastName.trim(),
         email: regEmail.trim().toLowerCase(),
         password: regPassword,
         gender: regGender,
-        center: regCenter,
+        center: isAdminAuthMode ? 'Headquarters' : regCenter,
         courses: isAdminAuthMode ? [] : regSelectedCourses,
         role: isAdminAuthMode ? 'Admin' : 'Instructor'
       });
@@ -214,6 +217,11 @@ export default function InstructorPortal({
       setRegSelectedCourses([]);
       setIsRegistering(false);
       setLoginError('');
+      if (registered && registered.status === 'Deactivated') {
+        setRegistrationSuccess('Instructor profile registered successfully! Your account is currently pending activation by an Administrator. Please contact your administrator to authorize your login.');
+      } else {
+        setRegistrationSuccess('Admin account registered and session authenticated successfully!');
+      }
     } catch (err: any) {
       setLoginError(err.message || 'Registration failed. Please try again.');
     } finally {
@@ -675,6 +683,13 @@ export default function InstructorPortal({
             </div>
           )}
 
+          {registrationSuccess && (
+            <div className="mb-6 p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-800 text-xs flex items-start gap-2">
+              <CheckSquare className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+              <span>{registrationSuccess}</span>
+            </div>
+          )}
+
           {!isRegistering ? (
             /* LOGIN SCREEN */
             <form onSubmit={handleLoginSubmit} className="space-y-4">
@@ -737,6 +752,7 @@ export default function InstructorPortal({
                   onClick={() => {
                     setIsRegistering(true);
                     setLoginError('');
+                    setRegistrationSuccess('');
                   }}
                   className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold"
                 >
@@ -798,7 +814,7 @@ export default function InstructorPortal({
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className={isAdminAuthMode ? "block" : "grid grid-cols-2 gap-3"}>
                 <div>
                   <label className="block text-[10px] font-bold text-slate-700 mb-1">Gender</label>
                   <select
@@ -811,20 +827,22 @@ export default function InstructorPortal({
                     <option value="Prefer not to say">Prefer not to say</option>
                   </select>
                 </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-700 mb-1">Center Base</label>
-                  <select
-                    value={regCenter}
-                    required
-                    onChange={(e) => setRegCenter(e.target.value)}
-                    className="w-full p-2 border border-slate-300 rounded-lg text-xs"
-                  >
-                    <option value="">Select center...</option>
-                    {config.centers.map((c) => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
-                  </select>
-                </div>
+                {!isAdminAuthMode && (
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-700 mb-1">Center Base</label>
+                    <select
+                      value={regCenter}
+                      required
+                      onChange={(e) => setRegCenter(e.target.value)}
+                      className="w-full p-2 border border-slate-300 rounded-lg text-xs"
+                    >
+                      <option value="">Select center...</option>
+                      {config.centers.map((c) => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
 
               {/* Course syllabus checkboxes (ONLY show for Instructors, NOT Admin) */}
@@ -875,6 +893,7 @@ export default function InstructorPortal({
                   onClick={() => {
                     setIsRegistering(false);
                     setLoginError('');
+                    setRegistrationSuccess('');
                   }}
                   className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold"
                 >

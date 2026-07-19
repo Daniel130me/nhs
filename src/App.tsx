@@ -103,8 +103,11 @@ export default function App() {
       }
       const registered = await response.json();
       setInstructors((prev) => [...prev, registered]);
-      setCurrentInstructor(registered);
-      sessionStorage.setItem('nh_session', JSON.stringify(registered));
+      if (registered.status === 'Active') {
+        setCurrentInstructor(registered);
+        sessionStorage.setItem('nh_session', JSON.stringify(registered));
+      }
+      return registered;
     } catch (err) {
       console.error("Failed to persist instructor in Neon database:", err);
       throw err;

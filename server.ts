@@ -188,9 +188,10 @@ app.post("/api/auth/register", async (req, res) => {
     const createdAt = new Date().toISOString();
     const hashedPassword = getSha256(password);
     
+    const initialStatus = role === 'Admin' ? 'Active' : 'Deactivated';
     await query(
-      `INSERT INTO instructors (id, first_name, last_name, email, password, gender, center, courses, role, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+      `INSERT INTO instructors (id, first_name, last_name, email, password, gender, center, courses, role, status, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
       [
         id,
         firstName,
@@ -201,6 +202,7 @@ app.post("/api/auth/register", async (req, res) => {
         center || "",
         JSON.stringify(courses || []),
         role,
+        initialStatus,
         createdAt
       ]
     );
@@ -214,7 +216,7 @@ app.post("/api/auth/register", async (req, res) => {
       center,
       courses,
       role,
-      status: 'Active',
+      status: initialStatus,
       createdAt
     });
   } catch (err: any) {
