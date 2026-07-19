@@ -75,6 +75,7 @@ export default function InstructorPortal({
   const [loginError, setLoginError] = useState('');
   const [isRegistering, setIsRegistering] = useState(false);
   const [isAuthLoading, setIsAuthLoading] = useState(false);
+  const [isAdminAuthMode, setIsAdminAuthMode] = useState(false);
 
   // Registration states
   const [regFirstName, setRegFirstName] = useState('');
@@ -185,7 +186,7 @@ export default function InstructorPortal({
       setLoginError('Please fill in all registration fields including password.');
       return;
     }
-    if (regSelectedCourses.length === 0) {
+    if (!isAdminAuthMode && regSelectedCourses.length === 0) {
       setLoginError('Please select at least one course you are approved to teach.');
       return;
     }
@@ -200,8 +201,8 @@ export default function InstructorPortal({
         password: regPassword,
         gender: regGender,
         center: regCenter,
-        courses: regSelectedCourses,
-        role: 'Instructor'
+        courses: isAdminAuthMode ? [] : regSelectedCourses,
+        role: isAdminAuthMode ? 'Admin' : 'Instructor'
       });
 
       setRegFirstName('');
@@ -629,15 +630,42 @@ export default function InstructorPortal({
   // Authentication Required Screen
   if (!currentInstructor) {
     return (
-      <div className="max-w-md mx-auto my-12 bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden">
+      <div className={`max-w-md mx-auto my-12 bg-white border rounded-2xl shadow-xl overflow-hidden transition-all duration-300 ${
+        isAdminAuthMode ? 'border-slate-800 shadow-slate-900/15' : 'border-slate-200'
+      }`}>
         {/* LOGIN AND REGISTER FORMS */}
-        <div className="p-8">
+        <div className="p-8 relative">
           <div className="text-center mb-8">
-            <div className="w-12 h-12 bg-red-100 text-red-500 rounded-2xl flex items-center justify-center text-xl font-bold mx-auto mb-4 border border-red-200">
+            <div 
+              onDoubleClick={() => setIsAdminAuthMode(!isAdminAuthMode)}
+              className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl font-bold mx-auto mb-4 border transition-all duration-300 cursor-pointer select-none ${
+                isAdminAuthMode 
+                  ? 'bg-slate-900 text-amber-400 border-slate-700 hover:scale-105 shadow-md' 
+                  : 'bg-red-100 text-red-500 border-red-200 hover:scale-105'
+              }`}
+              title="Double click for Admin Auth Portal"
+            >
               NH
             </div>
-            <h3 className="text-lg font-bold font-display text-slate-900">Authorized Instructor Portal</h3>
-            <p className="text-xs text-slate-400 mt-1">Please enter your registered center email to unlock operations</p>
+            <h3 
+              onClick={() => {
+                const clicks = (window as any)._logoClicks || 0;
+                if (clicks >= 2) {
+                  setIsAdminAuthMode(!isAdminAuthMode);
+                  (window as any)._logoClicks = 0;
+                } else {
+                  (window as any)._logoClicks = clicks + 1;
+                }
+              }}
+              className="text-lg font-bold font-display text-slate-900 cursor-pointer select-none"
+            >
+              {isAdminAuthMode ? 'Authorized Admin Portal' : 'Authorized Instructor Portal'}
+            </h3>
+            <p className="text-xs text-slate-400 mt-1">
+              {isAdminAuthMode 
+                ? 'Please enter your registered administrative credentials' 
+                : 'Please enter your registered center email to unlock operations'}
+            </p>
           </div>
 
           {loginError && (
@@ -651,14 +679,16 @@ export default function InstructorPortal({
             /* LOGIN SCREEN */
             <form onSubmit={handleLoginSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Center Email Address</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  {isAdminAuthMode ? 'Admin Email Address' : 'Center Email Address'}
+                </label>
                 <div className="relative">
                   <input
                     type="email"
                     required
                     value={emailInput}
                     onChange={(e) => setEmailInput(e.target.value)}
-                    placeholder="instructor@newhorizons.com"
+                    placeholder={isAdminAuthMode ? 'admin@newhorizons.com' : 'instructor@newhorizons.com'}
                     className="w-full p-2.5 border border-slate-300 rounded-lg text-xs"
                   />
                 </div>
@@ -676,13 +706,19 @@ export default function InstructorPortal({
                     className="w-full p-2.5 border border-slate-300 rounded-lg text-xs"
                   />
                 </div>
-                <p className="text-[10px] text-slate-400 mt-1">Default seeded accounts use password: <code className="font-mono bg-slate-100 px-1 py-0.5 rounded text-red-500">password123</code></p>
+                {!isAdminAuthMode && (
+                  <p className="text-[10px] text-slate-400 mt-1">Default seeded accounts use password: <code className="font-mono bg-slate-100 px-1 py-0.5 rounded text-red-500">password123</code></p>
+                )}
               </div>
 
               <button
                 type="submit"
                 disabled={isAuthLoading}
-                className="w-full py-2.5 bg-red-500 hover:bg-red-600 disabled:bg-slate-300 text-white font-bold text-xs rounded-lg shadow cursor-pointer disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-1.5"
+                className={`w-full py-2.5 text-white font-bold text-xs rounded-lg shadow cursor-pointer disabled:cursor-not-allowed transition-all flex items-center justify-center gap-1.5 ${
+                  isAdminAuthMode 
+                    ? 'bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300' 
+                    : 'bg-red-500 hover:bg-red-600 disabled:bg-slate-300'
+                }`}
               >
                 {isAuthLoading ? (
                   <>
@@ -690,7 +726,7 @@ export default function InstructorPortal({
                   </>
                 ) : (
                   <>
-                    <LogIn className="w-4 h-4" /> Authenticate Account
+                    <LogIn className="w-4 h-4" /> {isAdminAuthMode ? 'Authenticate Admin Account' : 'Authenticate Account'}
                   </>
                 )}
               </button>
@@ -704,7 +740,7 @@ export default function InstructorPortal({
                   }}
                   className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold"
                 >
-                  Create Instructor Account
+                  {isAdminAuthMode ? 'Create Administrative Account' : 'Create Instructor Account'}
                 </button>
               </div>
             </form>
@@ -737,13 +773,15 @@ export default function InstructorPortal({
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold text-slate-700 mb-1">Approved Center Email</label>
+                <label className="block text-[10px] font-bold text-slate-700 mb-1">
+                  {isAdminAuthMode ? 'Approved Admin Email' : 'Approved Center Email'}
+                </label>
                 <input
                   type="email"
                   required
                   value={regEmail}
                   onChange={(e) => setRegEmail(e.target.value)}
-                  placeholder="e.g. eze@newhorizons.com"
+                  placeholder={isAdminAuthMode ? 'e.g. adekoya@newhorizons.com' : 'e.g. eze@newhorizons.com'}
                   className="w-full p-2 border border-slate-300 rounded-lg text-xs"
                 />
               </div>
@@ -789,39 +827,45 @@ export default function InstructorPortal({
                 </div>
               </div>
 
-              {/* Course syllabus checkboxes */}
-              <div>
-                <label className="block text-[10px] font-bold text-slate-700 uppercase mb-2">Approved Syllabus Credentials</label>
-                <p className="text-[10px] text-slate-400 mb-2">Select courses you are certified or scheduled to lead.</p>
-                <div className="max-h-28 overflow-y-auto border border-slate-200 rounded-lg p-2.5 space-y-1 bg-slate-50/50">
-                  {config.courses.flatMap((cat) => cat.items).map((courseName) => {
-                    const checked = regSelectedCourses.includes(courseName);
-                    return (
-                      <button
-                        key={courseName}
-                        type="button"
-                        onClick={() => toggleCourseApproval(courseName)}
-                        className="flex items-center gap-2 text-left text-xs w-full p-1 hover:bg-white rounded"
-                      >
-                        {checked ? <CheckSquare className="w-3.5 h-3.5 text-red-500" /> : <Square className="w-3.5 h-3.5 text-slate-300" />}
-                        <span className="text-slate-700">{courseName}</span>
-                      </button>
-                    );
-                  })}
+              {/* Course syllabus checkboxes (ONLY show for Instructors, NOT Admin) */}
+              {!isAdminAuthMode && (
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase mb-2">Approved Syllabus Credentials</label>
+                  <p className="text-[10px] text-slate-400 mb-2">Select courses you are certified or scheduled to lead.</p>
+                  <div className="max-h-28 overflow-y-auto border border-slate-200 rounded-lg p-2.5 space-y-1 bg-slate-50/50">
+                    {config.courses.flatMap((cat) => cat.items).map((courseName) => {
+                      const checked = regSelectedCourses.includes(courseName);
+                      return (
+                        <button
+                          key={courseName}
+                          type="button"
+                          onClick={() => toggleCourseApproval(courseName)}
+                          className="flex items-center gap-2 text-left text-xs w-full p-1 hover:bg-white rounded"
+                        >
+                          {checked ? <CheckSquare className="w-3.5 h-3.5 text-red-500" /> : <Square className="w-3.5 h-3.5 text-slate-300" />}
+                          <span className="text-slate-700">{courseName}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
+              )}
 
               <button
                 type="submit"
                 disabled={isAuthLoading}
-                className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 text-white font-bold text-xs rounded-lg shadow cursor-pointer disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-1.5"
+                className={`w-full py-2.5 text-white font-bold text-xs rounded-lg shadow cursor-pointer disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-1.5 ${
+                  isAdminAuthMode 
+                    ? 'bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300' 
+                    : 'bg-red-500 hover:bg-red-600 disabled:bg-slate-300'
+                }`}
               >
                 {isAuthLoading ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" /> Registering...
                   </>
                 ) : (
-                  "Register Instructor Profile"
+                  isAdminAuthMode ? "Register Admin Profile" : "Register Instructor Profile"
                 )}
               </button>
 
@@ -839,6 +883,13 @@ export default function InstructorPortal({
               </div>
             </form>
           )}
+
+          {/* Hidden secret trigger at bottom right corner */}
+          <div 
+            onClick={() => setIsAdminAuthMode(!isAdminAuthMode)}
+            className="absolute bottom-1 right-2 w-2 h-2 cursor-pointer opacity-0 hover:opacity-10 bg-slate-300 rounded-full"
+            title="Secure Toggle Mode"
+          />
         </div>
       </div>
     );
