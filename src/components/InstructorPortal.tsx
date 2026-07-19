@@ -1315,6 +1315,27 @@ export default function InstructorPortal({
                     {/* RESOURCE DISPLAY BASED ON TYPE */}
                     {activeResource.type === 'slides' && (
                       <div className="space-y-4">
+                        {activeResource.url && activeResource.url !== "#" && (
+                          <div className="p-3 bg-indigo-50 border border-indigo-100 rounded-xl flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <BookOpen className="w-5 h-5 text-indigo-600 shrink-0" />
+                              <div className="truncate">
+                                <p className="text-xs font-bold text-slate-800">Synchronized Slides Attachment</p>
+                                <a href={activeResource.url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-indigo-600 hover:underline font-mono truncate block max-w-xs">
+                                  {activeResource.url.split('/').pop()}
+                                </a>
+                              </div>
+                            </div>
+                            <a
+                              href={activeResource.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[10px] rounded-lg shadow transition-colors shrink-0"
+                            >
+                              Open Slides File
+                            </a>
+                          </div>
+                        )}
                         {renderSlideContent(activeResource.content || '', currentSlideIndex)}
                         
                         <div className="flex justify-between items-center">
@@ -1340,51 +1361,85 @@ export default function InstructorPortal({
                     )}
 
                     {activeResource.type === 'pdf' && (
-                      <div className="relative bg-amber-50/20 border border-amber-100/50 rounded-xl p-6 h-64 overflow-y-auto font-serif text-slate-800 leading-relaxed text-xs shadow-inner relative select-none">
-                        {/* secure watermark */}
-                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.03] select-none">
-                          <div className="text-black font-black text-4xl -rotate-45 leading-none">
-                            NH CLC CONFIDENTIAL
+                      <div className="space-y-4">
+                        {activeResource.url && activeResource.url !== "#" && (
+                          <div className="p-3 bg-indigo-50 border border-indigo-100 rounded-xl flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <FileText className="w-5 h-5 text-indigo-600 shrink-0" />
+                              <div className="truncate">
+                                <p className="text-xs font-bold text-slate-800">Synchronized PDF Study Guide</p>
+                                <a href={activeResource.url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-indigo-600 hover:underline font-mono truncate block max-w-xs">
+                                  {activeResource.url.split('/').pop()}
+                                </a>
+                              </div>
+                            </div>
+                            <a
+                              href={activeResource.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[10px] rounded-lg shadow transition-colors shrink-0"
+                            >
+                              Open PDF Manual
+                            </a>
                           </div>
+                        )}
+                        <div className="relative bg-amber-50/20 border border-amber-100/50 rounded-xl p-6 h-64 overflow-y-auto font-serif text-slate-800 leading-relaxed text-xs shadow-inner select-none">
+                          {/* secure watermark */}
+                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.03] select-none">
+                            <div className="text-black font-black text-4xl -rotate-45 leading-none">
+                              NH CLC CONFIDENTIAL
+                            </div>
+                          </div>
+                          <p className="mb-4 whitespace-pre-wrap">{activeResource.content || 'Secure study guide details.'}</p>
                         </div>
-                        <p className="mb-4 whitespace-pre-wrap">{activeResource.content || 'Secure study guide details.'}</p>
                       </div>
                     )}
 
                     {activeResource.type === 'video' && (
                       <div className="space-y-4">
-                        {/* Simulated HTML5 secure video player */}
-                        <div className="bg-slate-950 rounded-xl h-48 flex flex-col items-center justify-center text-white relative shadow-inner overflow-hidden select-none">
-                          <div className="absolute top-2.5 left-3 text-[9px] text-emerald-400 font-bold uppercase tracking-wider bg-slate-900/80 px-2 py-0.5 rounded border border-slate-800">
-                            Simulated Secure Stream
+                        {activeResource.url && activeResource.url !== "#" ? (
+                          <div className="rounded-xl overflow-hidden border border-slate-200 bg-black">
+                            <video
+                              src={activeResource.url}
+                              controls
+                              className="w-full h-64 object-contain"
+                              referrerPolicy="no-referrer"
+                            />
                           </div>
-                          
-                          {/* Central Play/Pause button */}
-                          <button
-                            type="button"
-                            onClick={() => setIsVideoPlaying(!isVideoPlaying)}
-                            className="w-12 h-12 bg-white/20 hover:bg-white/30 text-white rounded-full flex items-center justify-center transition-transform hover:scale-110 shadow-lg relative z-10"
-                          >
-                            {isVideoPlaying ? (
-                              <div className="flex gap-1 justify-center items-center h-full">
-                                <span className="w-1.5 h-4 bg-white rounded-sm"></span>
-                                <span className="w-1.5 h-4 bg-white rounded-sm"></span>
-                              </div>
-                            ) : (
-                              <Play className="w-5 h-5 ml-1 fill-white" />
-                            )}
-                          </button>
-
-                          {/* Video progress controls bar */}
-                          <div className="absolute bottom-0 left-0 right-0 bg-black/60 p-2.5 flex items-center justify-between gap-3 text-[10px]">
-                            <span className="font-semibold">{isVideoPlaying ? 'PLAYING' : 'PAUSED'}</span>
-                            <div className="flex-1 bg-slate-800 h-1.5 rounded-full overflow-hidden relative">
-                              <div className="bg-emerald-500 h-full transition-all" style={{ width: `${videoPlaybackProgress}%` }} />
+                        ) : (
+                          /* Simulated HTML5 secure video player */
+                          <div className="bg-slate-950 rounded-xl h-48 flex flex-col items-center justify-center text-white relative shadow-inner overflow-hidden select-none">
+                            <div className="absolute top-2.5 left-3 text-[9px] text-emerald-400 font-bold uppercase tracking-wider bg-slate-900/80 px-2 py-0.5 rounded border border-slate-800">
+                              Simulated Secure Stream
                             </div>
-                            <span className="font-mono">{Math.round(videoPlaybackProgress / 10)}:00 / 10:00</span>
-                            <Volume2 className="w-3.5 h-3.5 text-slate-300" />
+                            
+                            {/* Central Play/Pause button */}
+                            <button
+                              type="button"
+                              onClick={() => setIsVideoPlaying(!isVideoPlaying)}
+                              className="w-12 h-12 bg-white/20 hover:bg-white/30 text-white rounded-full flex items-center justify-center transition-transform hover:scale-110 shadow-lg relative z-10"
+                            >
+                              {isVideoPlaying ? (
+                                <div className="flex gap-1 justify-center items-center h-full">
+                                  <span className="w-1.5 h-4 bg-white rounded-sm"></span>
+                                  <span className="w-1.5 h-4 bg-white rounded-sm"></span>
+                                </div>
+                              ) : (
+                                <Play className="w-5 h-5 ml-1 fill-white" />
+                              )}
+                            </button>
+
+                            {/* Video progress controls bar */}
+                            <div className="absolute bottom-0 left-0 right-0 bg-black/60 p-2.5 flex items-center justify-between gap-3 text-[10px]">
+                              <span className="font-semibold">{isVideoPlaying ? 'PLAYING' : 'PAUSED'}</span>
+                              <div className="flex-1 bg-slate-800 h-1.5 rounded-full overflow-hidden relative">
+                                <div className="bg-emerald-500 h-full transition-all" style={{ width: `${videoPlaybackProgress}%` }} />
+                              </div>
+                              <span className="font-mono">{Math.round(videoPlaybackProgress / 10)}:00 / 10:00</span>
+                              <Volume2 className="w-3.5 h-3.5 text-slate-300" />
+                            </div>
                           </div>
-                        </div>
+                        )}
 
                         {/* Transcript detail */}
                         <div className="bg-slate-50 border border-slate-100 p-4 rounded-lg text-xs text-slate-600">
