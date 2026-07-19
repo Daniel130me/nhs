@@ -43,9 +43,9 @@ interface InstructorPortalProps {
   examAttempts: ExamAttempt[];
   onAddExamAttempt: (attempt: ExamAttempt) => void;
   currentInstructor: Instructor | null;
-  onLogin: (email: string) => boolean;
+  onLogin: (email: string) => Promise<boolean>;
   onLogout: () => void;
-  onRegister: (instructor: Omit<Instructor, 'id' | 'createdAt'>) => void;
+  onRegister: (instructor: Omit<Instructor, 'id' | 'createdAt'>) => Promise<void>;
   onCreateClass: (cls: Omit<Class, 'id' | 'instructorId' | 'instructorName' | 'createdAt'>) => void;
   onEditClass: (cls: Class) => void;
   onDeleteClass: (classId: string) => void;
@@ -73,6 +73,7 @@ export default function InstructorPortal({
   const [emailInput, setEmailInput] = useState('');
   const [loginError, setLoginError] = useState('');
   const [isRegistering, setIsRegistering] = useState(false);
+  const [isAuthLoading, setIsAuthLoading] = useState(false);
 
   // Registration states
   const [regFirstName, setRegFirstName] = useState('');
@@ -140,22 +141,30 @@ export default function InstructorPortal({
   const [showGradedDetails, setShowGradedDetails] = useState(false);
 
   // ---- AUTH HANDLERS ----
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!emailInput.trim()) {
       setLoginError('Email is required');
       return;
     }
-    const success = onLogin(emailInput.trim().toLowerCase());
-    if (!success) {
-      setLoginError('Instructor email not found. Please register an account below.');
-    } else {
-      setLoginError('');
-      setEmailInput('');
+    setIsAuthLoading(true);
+    setLoginError('');
+    try {
+      const success = await onLogin(emailInput.trim().toLowerCase());
+      if (!success) {
+        setLoginError('Instructor email not found. Please register an account below.');
+      } else {
+        setLoginError('');
+        setEmailInput('');
+      }
+    } catch (err: any) {
+      setLoginError(err.message || 'Authentication failed. Please try again.');
+    } finally {
+      setIsAuthLoading(false);
     }
   };
 
-  const handleRegisterSubmit = (e: React.FormEvent) => {
+  const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!regFirstName.trim() || !regLastName.trim() || !regEmail.trim() || !regCenter) {
       setLoginError('Please fill in all registration fields.');
@@ -166,24 +175,32 @@ export default function InstructorPortal({
       return;
     }
 
-    onRegister({
-      firstName: regFirstName.trim(),
-      lastName: regLastName.trim(),
-      email: regEmail.trim().toLowerCase(),
-      gender: regGender,
-      center: regCenter,
-      courses: regSelectedCourses,
-      role: 'Instructor'
-    });
-
-    setRegFirstName('');
-    setRegLastName('');
-    setRegEmail('');
-    setRegGender('Prefer not to say');
-    setRegCenter('');
-    setRegSelectedCourses([]);
-    setIsRegistering(false);
+    setIsAuthLoading(true);
     setLoginError('');
+    try {
+      await onRegister({
+        firstName: regFirstName.trim(),
+        lastName: regLastName.trim(),
+        email: regEmail.trim().toLowerCase(),
+        gender: regGender,
+        center: regCenter,
+        courses: regSelectedCourses,
+        role: 'Instructor'
+      });
+
+      setRegFirstName('');
+      setRegLastName('');
+      setRegEmail('');
+      setRegGender('Prefer not to say');
+      setRegCenter('');
+      setRegSelectedCourses([]);
+      setIsRegistering(false);
+      setLoginError('');
+    } catch (err: any) {
+      setLoginError(err.message || 'Registration failed. Please try again.');
+    } finally {
+      setIsAuthLoading(false);
+    }
   };
 
   const toggleCourseApproval = (course: string) => {
@@ -586,9 +603,18 @@ export default function InstructorPortal({
 
               <button
                 type="submit"
-                className="w-full py-2.5 bg-red-500 hover:bg-red-600 text-white font-bold text-xs rounded-lg shadow cursor-pointer transition-colors flex items-center justify-center gap-1.5"
+                disabled={isAuthLoading}
+                className="w-full py-2.5 bg-red-500 hover:bg-red-600 disabled:bg-slate-300 text-white font-bold text-xs rounded-lg shadow cursor-pointer disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-1.5"
               >
-                <LogIn className="w-4 h-4" /> Authenticate Account
+                {isAuthLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" /> Authenticating...
+                  </>
+                ) : (
+                  <>
+                    <LogIn className="w-4 h-4" /> Authenticate Account
+                  </>
+                )}
               </button>
 
               <div className="border-t border-slate-100 pt-4 text-center">
@@ -697,9 +723,16 @@ export default function InstructorPortal({
 
               <button
                 type="submit"
-                className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-lg shadow cursor-pointer transition-colors"
+                disabled={isAuthLoading}
+                className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 text-white font-bold text-xs rounded-lg shadow cursor-pointer disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-1.5"
               >
-                Register Instructor Profile
+                {isAuthLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" /> Registering...
+                  </>
+                ) : (
+                  "Register Instructor Profile"
+                )}
               </button>
 
               <div className="border-t border-slate-100 pt-4 text-center">

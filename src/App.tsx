@@ -59,14 +59,30 @@ export default function App() {
   }, []);
 
   // ---- PORTAL AUTHENTICATION ACTIONS ----
-  const handleLogin = (email: string): boolean => {
-    const found = instructors.find((inst) => inst.email.toLowerCase() === email.toLowerCase());
-    if (found) {
-      setCurrentInstructor(found);
-      sessionStorage.setItem('nh_session', JSON.stringify(found));
-      return true;
+  const handleLogin = async (email: string): Promise<boolean> => {
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email })
+      });
+      if (response.ok) {
+        const found = await response.json();
+        setCurrentInstructor(found);
+        sessionStorage.setItem('nh_session', JSON.stringify(found));
+        setInstructors((prev) => {
+          if (!prev.some((inst) => inst.id === found.id)) {
+            return [...prev, found];
+          }
+          return prev.map((inst) => (inst.id === found.id ? found : inst));
+        });
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error("Login failure:", err);
+      return false;
     }
-    return false;
   };
 
   const handleLogout = () => {
@@ -75,29 +91,23 @@ export default function App() {
   };
 
   const handleRegister = async (newInst: Omit<Instructor, 'id' | 'createdAt'>) => {
-    const id = `inst-${Date.now()}`;
-    const createdAt = new Date().toISOString();
-    const instructor: Instructor = {
-      ...newInst,
-      id,
-      createdAt
-    };
-
-    // Optimistic Local UI update
-    const updated = [...instructors, instructor];
-    setInstructors(updated);
-    setCurrentInstructor(instructor);
-    sessionStorage.setItem('nh_session', JSON.stringify(instructor));
-
-    // Persistent Neon save
     try {
-      await fetch("/api/auth/register", {
+      const response = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(instructor)
+        body: JSON.stringify(newInst)
       });
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || "Failed to register profile");
+      }
+      const registered = await response.json();
+      setInstructors((prev) => [...prev, registered]);
+      setCurrentInstructor(registered);
+      sessionStorage.setItem('nh_session', JSON.stringify(registered));
     } catch (err) {
       console.error("Failed to persist instructor in Neon database:", err);
+      throw err;
     }
   };
 

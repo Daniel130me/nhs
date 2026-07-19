@@ -103,6 +103,9 @@ app.post("/api/auth/register", async (req, res) => {
     });
   } catch (err: any) {
     console.error("Registration failed:", err);
+    if (err.code === "23505" || err.message?.includes("unique constraint")) {
+      return res.status(409).json({ error: "An instructor with this email is already registered." });
+    }
     res.status(500).json({ error: err.message });
   }
 });
