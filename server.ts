@@ -3,6 +3,8 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
+import { initDb, query } from "./src/db";
+import { uploadFile } from "./src/storage";
 
 dotenv.config();
 
@@ -20,7 +22,602 @@ const ai = new GoogleGenAI({
 const app = express();
 const PORT = 3000;
 
-app.use(express.json({ limit: "10mb" }));
+app.use(express.json({ limit: "25mb" }));
+
+// Serve uploaded static files if locally stored
+app.use("/uploads", express.static(path.join(process.cwd(), "public", "uploads")));
+
+// ----------------------------------------------------
+// DATABASE API ENDPOINTS
+// ----------------------------------------------------
+
+// --- Auth Endpoints ---
+app.post("/api/auth/login", async (req, res) => {
+  const { email } = req.body;
+  if (!email) {
+    return res.status(400).json({ error: "Email is required" });
+  }
+  try {
+    const instructors = await query(
+      "SELECT * FROM instructors WHERE LOWER(email) = LOWER($1)",
+      [email.trim()]
+    );
+    if (instructors.length > 0) {
+      // Return with frontend-expected camelCase names
+      const inst = instructors[0];
+      return res.json({
+        id: inst.id,
+        firstName: inst.first_name,
+        lastName: inst.last_name,
+        email: inst.email,
+        gender: inst.gender,
+        center: inst.center,
+        courses: inst.courses,
+        role: inst.role,
+        createdAt: inst.created_at
+      });
+    }
+    return res.status(404).json({ error: "Instructor not found with this email" });
+  } catch (err: any) {
+    console.error("Login endpoint failed:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/auth/register", async (req, res) => {
+  const { firstName, lastName, email, gender, center, courses, role } = req.body;
+  if (!firstName || !lastName || !email || !role) {
+    return res.status(400).json({ error: "Required fields missing for registration" });
+  }
+
+  try {
+    const id = `inst-${Date.now()}`;
+    const createdAt = new Date().toISOString();
+    
+    await query(
+      `INSERT INTO instructors (id, first_name, last_name, email, gender, center, courses, role, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [
+        id,
+        firstName,
+        lastName,
+        email.trim(),
+        gender || "",
+        center || "",
+        JSON.stringify(courses || []),
+        role,
+        createdAt
+      ]
+    );
+
+    res.status(201).json({
+      id,
+      firstName,
+      lastName,
+      email,
+      gender,
+      center,
+      courses,
+      role,
+      createdAt
+    });
+  } catch (err: any) {
+    console.error("Registration failed:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- Instructors Endpoints ---
+app.get("/api/instructors", async (req, res) => {
+  try {
+    const instructors = await query("SELECT * FROM instructors ORDER BY created_at DESC");
+    const formatted = instructors.map(inst => ({
+      id: inst.id,
+      firstName: inst.first_name,
+      lastName: inst.last_name,
+      email: inst.email,
+      gender: inst.gender,
+      center: inst.center,
+      courses: inst.courses,
+      role: inst.role,
+      createdAt: inst.created_at
+    }));
+    res.json(formatted);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- Classes Endpoints ---
+app.get("/api/classes", async (req, res) => {
+  try {
+    const classes = await query("SELECT * FROM classes ORDER BY created_at DESC");
+    const formatted = classes.map(c => ({
+      id: c.id,
+      courseName: c.course_name,
+      instructorId: c.instructor_id,
+      instructorName: c.instructor_name,
+      totalDurationHours: c.total_duration_hours,
+      classroom: c.classroom,
+      scheduleType: c.schedule_type,
+      days: c.days,
+      timeSlot: c.time_slot,
+      startDate: c.start_date,
+      endDate: c.end_date,
+      modules: c.modules,
+      status: c.status,
+      createdAt: c.created_at
+    }));
+    res.json(formatted);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/classes", async (req, res) => {
+  const {
+    id,
+    courseName,
+    instructorId,
+    instructorName,
+    totalDurationHours,
+    classroom,
+    scheduleType,
+    days,
+    timeSlot,
+    startDate,
+    endDate,
+    modules,
+    status
+  } = req.body;
+
+  if (!courseName || !instructorId || !instructorName) {
+    return res.status(400).json({ error: "Missing key parameters for class creation" });
+  }
+
+  const classId = id || `class-${Date.now()}`;
+  const createdAt = new Date().toISOString();
+
+  try {
+    await query(
+      `INSERT INTO classes (id, course_name, instructor_id, instructor_name, total_duration_hours, classroom, schedule_type, days, time_slot, start_date, end_date, modules, status, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+      [
+        classId,
+        courseName,
+        instructorId,
+        instructorName,
+        totalDurationHours || 0,
+        classroom || "",
+        scheduleType || "Weekday",
+        JSON.stringify(days || []),
+        timeSlot || "Morning",
+        startDate || "",
+        endDate || "",
+        JSON.stringify(modules || []),
+        status || "Active",
+        createdAt
+      ]
+    );
+
+    res.status(201).json({
+      id: classId,
+      courseName,
+      instructorId,
+      instructorName,
+      totalDurationHours,
+      classroom,
+      scheduleType,
+      days,
+      timeSlot,
+      startDate,
+      endDate,
+      modules,
+      status,
+      createdAt
+    });
+  } catch (err: any) {
+    console.error("Class creation failed:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put("/api/classes/:id", async (req, res) => {
+  const { id } = req.params;
+  const {
+    courseName,
+    instructorId,
+    instructorName,
+    totalDurationHours,
+    classroom,
+    scheduleType,
+    days,
+    timeSlot,
+    startDate,
+    endDate,
+    modules,
+    status
+  } = req.body;
+
+  try {
+    await query(
+      `UPDATE classes 
+       SET course_name = $1, instructor_id = $2, instructor_name = $3, total_duration_hours = $4, 
+           classroom = $5, schedule_type = $6, days = $7, time_slot = $8, start_date = $9, 
+           end_date = $10, modules = $11, status = $12
+       WHERE id = $13`,
+      [
+        courseName,
+        instructorId,
+        instructorName,
+        totalDurationHours,
+        classroom,
+        scheduleType,
+        JSON.stringify(days),
+        timeSlot,
+        startDate,
+        endDate,
+        JSON.stringify(modules),
+        status,
+        id
+      ]
+    );
+    res.json({ message: "Class updated successfully" });
+  } catch (err: any) {
+    console.error("Class update failed:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete("/api/classes/:id", async (req, res) => {
+  const { id } = req.params;
+  try {
+    await query("DELETE FROM classes WHERE id = $1", [id]);
+    res.json({ message: "Class deleted successfully" });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- Weekly Logs Endpoints ---
+app.get("/api/logs", async (req, res) => {
+  try {
+    const logs = await query("SELECT * FROM weekly_logs ORDER BY submitted_at DESC");
+    const formatted = logs.map(log => ({
+      id: log.id,
+      classId: log.class_id,
+      weekNumber: log.week_number,
+      hoursLogged: log.hours_logged,
+      modulesCoveredThisWeek: log.modules_covered_this_week,
+      challenges: log.challenges,
+      submittedAt: log.submitted_at,
+      instructorId: log.instructor_id
+    }));
+    res.json(formatted);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/logs", async (req, res) => {
+  const { id, classId, weekNumber, hoursLogged, modulesCoveredThisWeek, challenges, instructorId } = req.body;
+  if (!classId || !weekNumber || !instructorId) {
+    return res.status(400).json({ error: "Required fields missing for log submission" });
+  }
+
+  const logId = id || `log-${Date.now()}`;
+  const submittedAt = new Date().toISOString();
+
+  try {
+    await query(
+      `INSERT INTO weekly_logs (id, class_id, week_number, hours_logged, modules_covered_this_week, challenges, submitted_at, instructor_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [
+        logId,
+        classId,
+        weekNumber,
+        hoursLogged || 0,
+        JSON.stringify(modulesCoveredThisWeek || []),
+        challenges || "",
+        submittedAt,
+        instructorId
+      ]
+    );
+
+    res.status(201).json({
+      id: logId,
+      classId,
+      weekNumber,
+      hoursLogged,
+      modulesCoveredThisWeek,
+      challenges,
+      submittedAt,
+      instructorId
+    });
+  } catch (err: any) {
+    console.error("Log submission failed:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- Student Surveys Endpoints ---
+app.get("/api/surveys", async (req, res) => {
+  try {
+    const surveys = await query("SELECT * FROM student_surveys ORDER BY submitted_at DESC");
+    const formatted = surveys.map(s => ({
+      id: s.id,
+      weekEnding: s.week_ending,
+      courseName: s.course_name,
+      center: s.center,
+      studentName: s.student_name,
+      anonymous: s.anonymous,
+      pace: s.pace,
+      clarity: s.clarity,
+      keepUp: s.keep_up,
+      questionsAnswered: s.questions_answered,
+      materialsClear: s.materials_clear,
+      materialsOnTime: s.materials_on_time,
+      exercisesMatched: s.exercises_matched,
+      labSufficient: s.lab_sufficient,
+      toolsWorked: s.tools_worked,
+      couldComplete: s.could_complete,
+      hadIssue: s.had_issue,
+      issueCategories: s.issue_categories,
+      severity: s.severity,
+      issueDescription: s.issue_description,
+      repeatIssue: s.repeat_issue,
+      overallSatisfaction: s.overall_satisfaction,
+      confidence: s.confidence,
+      additionalComments: s.additional_comments,
+      submittedAt: s.submitted_at
+    }));
+    res.json(formatted);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/surveys", async (req, res) => {
+  const {
+    id, weekEnding, courseName, center, studentName, anonymous, pace, clarity, keepUp,
+    questionsAnswered, materialsClear, materialsOnTime, exercisesMatched, labSufficient,
+    toolsWorked, couldComplete, hadIssue, issueCategories, severity, issueDescription,
+    repeatIssue, overallSatisfaction, confidence, additionalComments
+  } = req.body;
+
+  if (!courseName || !center) {
+    return res.status(400).json({ error: "courseName and center are required" });
+  }
+
+  const srvId = id || `survey-${Date.now()}`;
+  const submittedAt = new Date().toISOString();
+
+  try {
+    await query(
+      `INSERT INTO student_surveys (
+        id, week_ending, course_name, center, student_name, anonymous, pace, clarity, keep_up,
+        questions_answered, materials_clear, materials_on_time, exercises_matched, lab_sufficient,
+        tools_worked, could_complete, had_issue, issue_categories, severity, issue_description,
+        repeat_issue, overall_satisfaction, confidence, additional_comments, submitted_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)`,
+      [
+        srvId,
+        weekEnding || new Date().toISOString().split('T')[0],
+        courseName,
+        center,
+        studentName || "",
+        !!anonymous,
+        pace || 3,
+        clarity || 3,
+        keepUp || 3,
+        questionsAnswered || "Usually",
+        materialsClear || 3,
+        materialsOnTime || "Yes",
+        exercisesMatched || "Yes",
+        labSufficient,
+        toolsWorked || "Yes",
+        couldComplete || "Yes",
+        hadIssue || "No",
+        JSON.stringify(issueCategories || []),
+        severity || "",
+        issueDescription || "",
+        repeatIssue || "",
+        overallSatisfaction || 3,
+        confidence || 3,
+        additionalComments || "",
+        submittedAt
+      ]
+    );
+
+    res.status(201).json({
+      id: srvId,
+      weekEnding,
+      courseName,
+      center,
+      studentName,
+      anonymous,
+      pace,
+      clarity,
+      keepUp,
+      questionsAnswered,
+      materialsClear,
+      materialsOnTime,
+      exercisesMatched,
+      labSufficient,
+      toolsWorked,
+      couldComplete,
+      hadIssue,
+      issueCategories,
+      severity,
+      issueDescription,
+      repeatIssue,
+      overallSatisfaction,
+      confidence,
+      additionalComments,
+      submittedAt
+    });
+  } catch (err: any) {
+    console.error("Survey submission failed:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- Courses Endpoints ---
+app.get("/api/courses", async (req, res) => {
+  try {
+    const courses = await query("SELECT * FROM courses ORDER BY created_at DESC");
+    res.json(courses);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/courses", async (req, res) => {
+  const { id, name, category, description, lessons } = req.body;
+  if (!name || !category) {
+    return res.status(400).json({ error: "Name and Category are required" });
+  }
+
+  const crsId = id || `course-${name.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
+  const createdAt = new Date().toISOString();
+
+  try {
+    // Check if course already exists to update it, otherwise insert
+    const existing = await query("SELECT id FROM courses WHERE id = $1", [crsId]);
+    if (existing.length > 0) {
+      await query(
+        `UPDATE courses 
+         SET name = $1, category = $2, description = $3, lessons = $4
+         WHERE id = $5`,
+        [name, category, description || "", JSON.stringify(lessons || []), crsId]
+      );
+    } else {
+      await query(
+        `INSERT INTO courses (id, name, category, description, lessons, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [crsId, name, category, description || "", JSON.stringify(lessons || []), createdAt]
+      );
+    }
+    res.json({ id: crsId, name, category, description, lessons, createdAt });
+  } catch (err: any) {
+    console.error("Course save/update failed:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete("/api/courses/:id", async (req, res) => {
+  const { id } = req.params;
+  try {
+    await query("DELETE FROM courses WHERE id = $1", [id]);
+    res.json({ message: "Course deleted successfully" });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- Exam Attempts Endpoints ---
+app.get("/api/exam-attempts", async (req, res) => {
+  try {
+    const attempts = await query("SELECT * FROM exam_attempts ORDER BY taken_at DESC");
+    const formatted = attempts.map(att => ({
+      id: att.id,
+      instructorId: att.instructor_id,
+      courseName: att.course_name,
+      trialNumber: att.trial_number,
+      score: att.score,
+      passed: att.passed,
+      feedback: att.feedback,
+      takenAt: att.taken_at
+    }));
+    res.json(formatted);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/exam-attempts", async (req, res) => {
+  const { id, instructorId, courseName, trialNumber, score, passed, feedback } = req.body;
+  if (!instructorId || !courseName) {
+    return res.status(400).json({ error: "Missing required exam attempt variables" });
+  }
+
+  const attId = id || `attempt-${Date.now()}`;
+  const takenAt = new Date().toISOString();
+
+  try {
+    await query(
+      `INSERT INTO exam_attempts (id, instructor_id, course_name, trial_number, score, passed, feedback, taken_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [attId, instructorId, courseName, trialNumber || 1, score || 0, !!passed, feedback || "", takenAt]
+    );
+
+    res.status(201).json({
+      id: attId,
+      instructorId,
+      courseName,
+      trialNumber,
+      score,
+      passed,
+      feedback,
+      takenAt
+    });
+  } catch (err: any) {
+    console.error("Exam attempt save failed:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- System Config Endpoints ---
+app.get("/api/config", async (req, res) => {
+  try {
+    const config = await query("SELECT * FROM system_config WHERE key = 'default'");
+    if (config.length > 0) {
+      res.json({
+        centers: config[0].centers,
+        courses: config[0].courses,
+        timeSlots: config[0].time_slots
+      });
+    } else {
+      res.status(404).json({ error: "Config not found" });
+    }
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put("/api/config", async (req, res) => {
+  const { centers, courses, timeSlots } = req.body;
+  try {
+    await query(
+      `UPDATE system_config 
+       SET centers = $1, courses = $2, time_slots = $3
+       WHERE key = 'default'`,
+      [JSON.stringify(centers), JSON.stringify(courses), JSON.stringify(timeSlots)]
+    );
+    res.json({ message: "Config updated successfully" });
+  } catch (err: any) {
+    console.error("Config update failed:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- R2 / Local File Upload Endpoint ---
+app.post("/api/upload", async (req, res) => {
+  const { fileName, mimeType, fileData } = req.body;
+  if (!fileName || !mimeType || !fileData) {
+    return res.status(400).json({ error: "fileName, mimeType, and fileData are required" });
+  }
+
+  try {
+    // Decode base64 fileData payload
+    const buffer = Buffer.from(fileData, "base64");
+    const uploadedUrl = await uploadFile(fileName, mimeType, buffer);
+    res.json({ url: uploadedUrl });
+  } catch (err: any) {
+    console.error("File upload failed:", err);
+    res.status(500).json({ error: "Failed to upload file: " + err.message });
+  }
+});
 
 // ----------------------------------------------------
 // API ROUTES: COURSE AUTHORING (GEMINI)
@@ -248,6 +845,9 @@ Write a supportive, highly constructive, and short paragraph (3-4 sentences max)
 // VITE OR STATIC FILE MIDDLEWARE MOUNTING
 // ----------------------------------------------------
 async function startServer() {
+  // Initialize Database schemas and seed before booting server
+  await initDb();
+
   if (process.env.NODE_ENV !== "production") {
     // Mounting Vite in development mode
     const vite = await createViteServer({

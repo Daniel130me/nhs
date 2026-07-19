@@ -35,6 +35,7 @@ import {
   FileSpreadsheet
 } from 'lucide-react';
 import { Instructor, Class, WeeklyLog, StudentSurvey, SystemConfig, Course, Lesson, Resource, ExamAttempt } from '../types';
+import FileUploader from './FileUploader';
 
 interface AdminDashboardProps {
   config: SystemConfig;
@@ -394,7 +395,7 @@ export default function AdminDashboard({
     }));
   };
 
-  const handleUpdateResourceField = (lessonId: string, resourceId: string, field: 'name' | 'content', val: string) => {
+  const handleUpdateResourceField = (lessonId: string, resourceId: string, field: 'name' | 'content' | 'url', val: string) => {
     setCourseLessons(courseLessons.map(l => {
       if (l.id !== lessonId) return l;
       return {
@@ -1437,14 +1438,22 @@ export default function AdminDashboard({
                                           </div>
                                           
                                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                            <div>
-                                              <label className="block text-[9px] text-slate-500 uppercase font-bold">Resource Display Name</label>
-                                              <input
-                                                type="text"
-                                                required
-                                                value={res.name}
-                                                onChange={(e) => handleUpdateResourceField(lesson.id, res.id, 'name', e.target.value)}
-                                                className="w-full p-1.5 border border-slate-300 rounded text-xs mt-0.5"
+                                            <div className="space-y-3">
+                                              <div>
+                                                <label className="block text-[9px] text-slate-500 uppercase font-bold">Resource Display Name</label>
+                                                <input
+                                                  type="text"
+                                                  required
+                                                  value={res.name}
+                                                  onChange={(e) => handleUpdateResourceField(lesson.id, res.id, 'name', e.target.value)}
+                                                  className="w-full p-1.5 border border-slate-300 rounded text-xs mt-0.5"
+                                                />
+                                              </div>
+                                              
+                                              {/* Cloudflare R2 Upload Component */}
+                                              <FileUploader
+                                                currentUrl={res.url !== "#" ? res.url : ""}
+                                                onUploadSuccess={(url) => handleUpdateResourceField(lesson.id, res.id, 'url', url)}
                                               />
                                             </div>
                                             <div>
@@ -1452,7 +1461,7 @@ export default function AdminDashboard({
                                                 {res.type === 'slides' ? 'Slide Deck Contents (Use newline for separate slides)' : res.type === 'pdf' ? 'PDF Study Content (Paragraphs of study reading)' : 'Video Lecture Script/Overview'}
                                               </label>
                                               <textarea
-                                                rows={2}
+                                                rows={5}
                                                 required
                                                 value={res.content || ''}
                                                 onChange={(e) => handleUpdateResourceField(lesson.id, res.id, 'content', e.target.value)}
