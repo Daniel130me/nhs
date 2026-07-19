@@ -59,12 +59,12 @@ export default function App() {
   }, []);
 
   // ---- PORTAL AUTHENTICATION ACTIONS ----
-  const handleLogin = async (email: string): Promise<boolean> => {
+  const handleLogin = async (email: string, password?: string): Promise<boolean> => {
     try {
       const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email })
+        body: JSON.stringify({ email, password })
       });
       if (response.ok) {
         const found = await response.json();

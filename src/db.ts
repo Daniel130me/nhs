@@ -45,6 +45,7 @@ export async function initDb() {
         first_name TEXT NOT NULL,
         last_name TEXT NOT NULL,
         email TEXT NOT NULL UNIQUE,
+        password TEXT,
         gender TEXT,
         center TEXT,
         courses JSONB NOT NULL,
@@ -52,6 +53,17 @@ export async function initDb() {
         created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
       );
     `);
+
+    try {
+      await query(`
+        ALTER TABLE instructors ADD COLUMN IF NOT EXISTS password TEXT;
+      `);
+      await query(`
+        UPDATE instructors SET password = 'password123' WHERE password IS NULL;
+      `);
+    } catch (err) {
+      console.warn("Could not execute instructor table migrations:", err);
+    }
 
     await query(`
       CREATE TABLE IF NOT EXISTS courses (
@@ -162,13 +174,14 @@ export async function initDb() {
       console.log("[DB Seeding] Seeding instructors...");
       for (const inst of SEED_INSTRUCTORS) {
         await query(
-          `INSERT INTO instructors (id, first_name, last_name, email, gender, center, courses, role, created_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+          `INSERT INTO instructors (id, first_name, last_name, email, password, gender, center, courses, role, created_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
           [
             inst.id,
             inst.firstName,
             inst.lastName,
             inst.email,
+            inst.password || 'password123',
             inst.gender,
             inst.center,
             JSON.stringify(inst.courses),

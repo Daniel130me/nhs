@@ -43,7 +43,7 @@ interface InstructorPortalProps {
   examAttempts: ExamAttempt[];
   onAddExamAttempt: (attempt: ExamAttempt) => void;
   currentInstructor: Instructor | null;
-  onLogin: (email: string) => Promise<boolean>;
+  onLogin: (email: string, password?: string) => Promise<boolean>;
   onLogout: () => void;
   onRegister: (instructor: Omit<Instructor, 'id' | 'createdAt'>) => Promise<void>;
   onCreateClass: (cls: Omit<Class, 'id' | 'instructorId' | 'instructorName' | 'createdAt'>) => void;
@@ -71,6 +71,7 @@ export default function InstructorPortal({
 }: InstructorPortalProps) {
   // Authentication local states
   const [emailInput, setEmailInput] = useState('');
+  const [passwordInput, setPasswordInput] = useState('');
   const [loginError, setLoginError] = useState('');
   const [isRegistering, setIsRegistering] = useState(false);
   const [isAuthLoading, setIsAuthLoading] = useState(false);
@@ -79,6 +80,7 @@ export default function InstructorPortal({
   const [regFirstName, setRegFirstName] = useState('');
   const [regLastName, setRegLastName] = useState('');
   const [regEmail, setRegEmail] = useState('');
+  const [regPassword, setRegPassword] = useState('');
   const [regGender, setRegGender] = useState('Prefer not to say');
   const [regCenter, setRegCenter] = useState('');
   const [regSelectedCourses, setRegSelectedCourses] = useState<string[]>([]);
@@ -147,15 +149,20 @@ export default function InstructorPortal({
       setLoginError('Email is required');
       return;
     }
+    if (!passwordInput) {
+      setLoginError('Password is required');
+      return;
+    }
     setIsAuthLoading(true);
     setLoginError('');
     try {
-      const success = await onLogin(emailInput.trim().toLowerCase());
+      const success = await onLogin(emailInput.trim().toLowerCase(), passwordInput);
       if (!success) {
-        setLoginError('Instructor email not found. Please register an account below.');
+        setLoginError('Invalid email or password. Default seeded accounts use password: password123');
       } else {
         setLoginError('');
         setEmailInput('');
+        setPasswordInput('');
       }
     } catch (err: any) {
       setLoginError(err.message || 'Authentication failed. Please try again.');
@@ -166,8 +173,8 @@ export default function InstructorPortal({
 
   const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!regFirstName.trim() || !regLastName.trim() || !regEmail.trim() || !regCenter) {
-      setLoginError('Please fill in all registration fields.');
+    if (!regFirstName.trim() || !regLastName.trim() || !regEmail.trim() || !regPassword || !regCenter) {
+      setLoginError('Please fill in all registration fields including password.');
       return;
     }
     if (regSelectedCourses.length === 0) {
@@ -182,6 +189,7 @@ export default function InstructorPortal({
         firstName: regFirstName.trim(),
         lastName: regLastName.trim(),
         email: regEmail.trim().toLowerCase(),
+        password: regPassword,
         gender: regGender,
         center: regCenter,
         courses: regSelectedCourses,
@@ -191,6 +199,7 @@ export default function InstructorPortal({
       setRegFirstName('');
       setRegLastName('');
       setRegEmail('');
+      setRegPassword('');
       setRegGender('Prefer not to say');
       setRegCenter('');
       setRegSelectedCourses([]);
@@ -601,6 +610,21 @@ export default function InstructorPortal({
                 </div>
               </div>
 
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Password</label>
+                <div className="relative">
+                  <input
+                    type="password"
+                    required
+                    value={passwordInput}
+                    onChange={(e) => setPasswordInput(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full p-2.5 border border-slate-300 rounded-lg text-xs"
+                  />
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1">Default seeded accounts use password: <code className="font-mono bg-slate-100 px-1 py-0.5 rounded text-red-500">password123</code></p>
+              </div>
+
               <button
                 type="submit"
                 disabled={isAuthLoading}
@@ -666,6 +690,18 @@ export default function InstructorPortal({
                   value={regEmail}
                   onChange={(e) => setRegEmail(e.target.value)}
                   placeholder="e.g. eze@newhorizons.com"
+                  className="w-full p-2 border border-slate-300 rounded-lg text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-700 mb-1">Set Account Password</label>
+                <input
+                  type="password"
+                  required
+                  value={regPassword}
+                  onChange={(e) => setRegPassword(e.target.value)}
+                  placeholder="e.g. securePass123"
                   className="w-full p-2 border border-slate-300 rounded-lg text-xs"
                 />
               </div>

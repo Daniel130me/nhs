@@ -33,9 +33,9 @@ app.use("/uploads", express.static(path.join(process.cwd(), "public", "uploads")
 
 // --- Auth Endpoints ---
 app.post("/api/auth/login", async (req, res) => {
-  const { email } = req.body;
-  if (!email) {
-    return res.status(400).json({ error: "Email is required" });
+  const { email, password } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({ error: "Email and password are required" });
   }
   try {
     const instructors = await query(
@@ -43,8 +43,13 @@ app.post("/api/auth/login", async (req, res) => {
       [email.trim()]
     );
     if (instructors.length > 0) {
-      // Return with frontend-expected camelCase names
       const inst = instructors[0];
+      const savedPassword = inst.password || 'password123';
+      if (savedPassword !== password) {
+        return res.status(401).json({ error: "Invalid password" });
+      }
+
+      // Return with frontend-expected camelCase names
       return res.json({
         id: inst.id,
         firstName: inst.first_name,
@@ -65,9 +70,9 @@ app.post("/api/auth/login", async (req, res) => {
 });
 
 app.post("/api/auth/register", async (req, res) => {
-  const { firstName, lastName, email, gender, center, courses, role } = req.body;
-  if (!firstName || !lastName || !email || !role) {
-    return res.status(400).json({ error: "Required fields missing for registration" });
+  const { firstName, lastName, email, password, gender, center, courses, role } = req.body;
+  if (!firstName || !lastName || !email || !password || !role) {
+    return res.status(400).json({ error: "Required fields missing for registration (ensure password is provided)" });
   }
 
   try {
@@ -75,13 +80,14 @@ app.post("/api/auth/register", async (req, res) => {
     const createdAt = new Date().toISOString();
     
     await query(
-      `INSERT INTO instructors (id, first_name, last_name, email, gender, center, courses, role, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      `INSERT INTO instructors (id, first_name, last_name, email, password, gender, center, courses, role, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
       [
         id,
         firstName,
         lastName,
         email.trim(),
+        password,
         gender || "",
         center || "",
         JSON.stringify(courses || []),
