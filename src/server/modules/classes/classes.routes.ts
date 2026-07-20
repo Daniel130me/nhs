@@ -4,6 +4,7 @@ import { asyncHandler } from "../../utils/async-handler";
 import { sendSuccess } from "../../utils/api-response";
 import { classSchema } from "./classes.schema";
 import { requireActiveUser } from "../../middleware/auth";
+import { logAudit } from "../../utils/audit";
 
 const router = Router();
 
@@ -69,6 +70,14 @@ router.post("/", requireActiveUser, asyncHandler(async (req, res) => {
     ]
   );
 
+  await logAudit({
+    req,
+    action: "Class assignment",
+    entityType: "class",
+    entityId: classId,
+    newValues: { instructorId, instructorName, courseName }
+  });
+
   return sendSuccess(res, {
     id: classId,
     courseName,
@@ -126,6 +135,14 @@ router.put("/:id", requireActiveUser, asyncHandler(async (req, res) => {
       id
     ]
   );
+
+  await logAudit({
+    req,
+    action: "Class assignment",
+    entityType: "class",
+    entityId: id,
+    newValues: { instructorId, instructorName, courseName }
+  });
 
   return sendSuccess(res, { success: true }, "Class updated successfully");
 }));

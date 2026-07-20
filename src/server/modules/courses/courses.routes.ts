@@ -5,6 +5,7 @@ import { sendSuccess } from "../../utils/api-response";
 import { aiService } from "../../services/ai.service";
 import { BadRequestError } from "../../utils/errors";
 import { requireActiveUser } from "../../middleware/auth";
+import { logAudit } from "../../utils/audit";
 
 const router = Router();
 
@@ -39,6 +40,14 @@ router.post("/", requireActiveUser, asyncHandler(async (req, res) => {
       [crsId, name, category, description || "", JSON.stringify(lessons || []), createdAt]
     );
   }
+
+  await logAudit({
+    req,
+    action: "Course publication",
+    entityType: "course",
+    entityId: crsId,
+    newValues: { name, category, description }
+  });
 
   return sendSuccess(res, { id: crsId, name, category, description, lessons, createdAt }, "Course saved successfully");
 }));

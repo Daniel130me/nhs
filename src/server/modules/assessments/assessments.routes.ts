@@ -5,8 +5,13 @@ import { sendSuccess } from "../../utils/api-response";
 import { aiService } from "../../services/ai.service";
 import { BadRequestError } from "../../utils/errors";
 import { requireActiveUser } from "../../middleware/auth";
+import { logAudit } from "../../utils/audit";
 
 const router = Router();
+
+// ... existing code ...
+// Let's keep existing code identical, but let's view more imports or do a surgical replace in /gemini/grade-exam
+
 
 router.get("/exam-attempts", requireActiveUser, asyncHandler(async (req, res) => {
   const attempts = await query("SELECT * FROM exam_attempts ORDER BY taken_at DESC");
@@ -106,6 +111,13 @@ router.post("/gemini/grade-exam", requireActiveUser, asyncHandler(async (req, re
   if (personalizedFeedback) {
     aiFeedback = personalizedFeedback;
   }
+
+  await logAudit({
+    req,
+    action: "Grade modification",
+    entityType: "exam_attempt",
+    newValues: { score: scorePct, passed, courseName }
+  });
 
   return sendSuccess(res, {
     score: scorePct,

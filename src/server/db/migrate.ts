@@ -212,6 +212,27 @@ const MIGRATIONS: Migration[] = [
          SELECT 1 FROM users WHERE LOWER(users.email) = LOWER(instructors.email)
        );`
     ]
+  },
+  {
+    id: "010_create_audit_logs_table",
+    queries: [
+      `CREATE TABLE IF NOT EXISTS audit_logs (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        actor_id UUID REFERENCES users(id),
+        action VARCHAR(100) NOT NULL,
+        entity_type VARCHAR(100) NOT NULL,
+        entity_id UUID,
+        old_values JSONB,
+        new_values JSONB,
+        metadata JSONB,
+        ip_address INET,
+        user_agent TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );`,
+      `CREATE INDEX IF NOT EXISTS audit_logs_actor_idx ON audit_logs(actor_id);`,
+      `CREATE INDEX IF NOT EXISTS audit_logs_entity_idx ON audit_logs(entity_type, entity_id);`,
+      `CREATE INDEX IF NOT EXISTS audit_logs_created_idx ON audit_logs(created_at DESC);`
+    ]
   }
 ];
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   ShieldCheck,
@@ -85,7 +85,206 @@ export default function AdminDashboard({
   const [severityFilter, setSeverityFilter] = useState('All');
 
   // Sub-tabs for the Admin portal
-  const [adminTab, setAdminTab] = useState<'Analytics' | 'Surveys' | 'InstructorLogs' | 'Config'>('Analytics');
+  const [adminTab, setAdminTab] = useState<'Analytics' | 'Instructors' | 'Surveys' | 'InstructorLogs' | 'Config'>('Analytics');
+
+  // Real-time instructors fetching states
+  const [dbInstructors, setDbInstructors] = useState<any[]>([]);
+  const [instructorSearch, setInstructorSearch] = useState('');
+  const [instStatusFilter, setInstStatusFilter] = useState('All');
+  const [instCenterFilter, setInstCenterFilter] = useState('All');
+  const [instCourseFilter, setInstCourseFilter] = useState('All');
+  const [instPage, setInstPage] = useState(1);
+  const [instTotalPages, setInstTotalPages] = useState(1);
+  const [instLoading, setInstLoading] = useState(false);
+  const [instError, setInstError] = useState('');
+  const [selectedInstructor, setSelectedInstructor] = useState<any | null>(null);
+  const [isDetailDrawerOpen, setIsDetailDrawerOpen] = useState(false);
+  
+  // Profile editing inside drawer
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [editFirstName, setEditFirstName] = useState('');
+  const [editLastName, setEditLastName] = useState('');
+  const [editGender, setEditGender] = useState('Male');
+  const [editCenter, setEditCenter] = useState('');
+  const [editCourses, setEditCourses] = useState<string[]>([]);
+  
+  // Confirmation Modal State
+  const [confirmationModal, setConfirmationModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  } | null>(null);
+
+  const fetchAdminInstructors = async () => {
+    setInstLoading(true);
+    setInstError('');
+    try {
+      const queryParams = new URLSearchParams({
+        search: instructorSearch,
+        status: instStatusFilter,
+        center: instCenterFilter,
+        course: instCourseFilter,
+        page: String(instPage),
+        limit: '6'
+      });
+      const response = await fetch(`/api/v1/admin/instructors?${queryParams.toString()}`);
+      if (!response.ok) {
+        throw new Error('Failed to load instructors');
+      }
+      const resData = await response.json();
+      const body = resData.data || resData;
+      setDbInstructors(body.instructors || []);
+      setInstTotalPages(body.meta?.pages || 1);
+    } catch (err: any) {
+      setInstError(err.message || 'Error loading instructors list');
+    } finally {
+      setInstLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (adminTab === 'Instructors') {
+      fetchAdminInstructors();
+    }
+  }, [adminTab, instructorSearch, instStatusFilter, instCenterFilter, instCourseFilter, instPage]);
+
+  const handleApproveInstructor = (id: string, name: string) => {
+    setConfirmationModal({
+      isOpen: true,
+      title: "Approve Instructor Account",
+      message: `Are you sure you want to approve the instructor profile for ${name}? This will activate their credentials.`,
+      onConfirm: async () => {
+        try {
+          const res = await fetch(`/api/v1/admin/instructors/${id}/approve`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+          });
+          if (!res.ok) {
+            const errData = await res.json();
+            throw new Error(errData.error || 'Failed to approve');
+          }
+          fetchAdminInstructors();
+          setSelectedInstructor(null);
+          setIsDetailDrawerOpen(false);
+          setConfirmationModal(null);
+        } catch (err: any) {
+          alert(err.message);
+        }
+      }
+    });
+  };
+
+  const handleRejectInstructor = (id: string, name: string) => {
+    setConfirmationModal({
+      isOpen: true,
+      title: "Reject Instructor Profile",
+      message: `Are you sure you want to reject and deactivate ${name}'s registration? This will terminate their session immediately.`,
+      onConfirm: async () => {
+        try {
+          const res = await fetch(`/api/v1/admin/instructors/${id}/reject`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+          });
+          if (!res.ok) {
+            const errData = await res.json();
+            throw new Error(errData.error || 'Failed to reject');
+          }
+          fetchAdminInstructors();
+          setSelectedInstructor(null);
+          setIsDetailDrawerOpen(false);
+          setConfirmationModal(null);
+        } catch (err: any) {
+          alert(err.message);
+        }
+      }
+    });
+  };
+
+  const handleStatusChange = (id: string, name: string, nextStatus: string) => {
+    const actionLabel = nextStatus === 'ACTIVE' ? 'Reactivate' : 'Suspend';
+    setConfirmationModal({
+      isOpen: true,
+      title: `${actionLabel} Account`,
+      message: `Are you sure you want to update ${name}'s status to ${nextStatus}? This action is fully audited.`,
+      onConfirm: async () => {
+        try {
+          const res = await fetch(`/api/v1/admin/instructors/${id}/status`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: nextStatus, reason: "Manual admin action" })
+          });
+          if (!res.ok) {
+            const errData = await res.json();
+            throw new Error(errData.error || 'Failed to update status');
+          }
+          fetchAdminInstructors();
+          setSelectedInstructor(null);
+          setIsDetailDrawerOpen(false);
+          setConfirmationModal(null);
+        } catch (err: any) {
+          alert(err.message);
+        }
+      }
+    });
+  };
+
+  const handleRoleChange = (id: string, name: string, nextRole: string) => {
+    setConfirmationModal({
+      isOpen: true,
+      title: `Promote / Reassign Role`,
+      message: `Are you sure you want to change ${name}'s role to ${nextRole}?`,
+      onConfirm: async () => {
+        try {
+          const res = await fetch(`/api/v1/admin/instructors/${id}/role`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ role: nextRole })
+          });
+          if (!res.ok) {
+            const errData = await res.json();
+            throw new Error(errData.error || 'Failed to update role');
+          }
+          fetchAdminInstructors();
+          setSelectedInstructor(null);
+          setIsDetailDrawerOpen(false);
+          setConfirmationModal(null);
+        } catch (err: any) {
+          alert(err.message);
+        }
+      }
+    });
+  };
+
+  const handleSaveProfileEdit = async (id: string) => {
+    try {
+      const res = await fetch(`/api/v1/admin/instructors/${id}/profile`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          firstName: editFirstName,
+          lastName: editLastName,
+          gender: editGender,
+          center: editCenter,
+          courses: editCourses
+        })
+      });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Failed to update profile');
+      }
+      setIsEditingProfile(false);
+      fetchAdminInstructors();
+      const detailRes = await fetch(`/api/v1/admin/instructors/${id}`);
+      if (detailRes.ok) {
+        const detail = await detailRes.json();
+        const body = detail.data || detail;
+        setSelectedInstructor(body);
+      }
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
 
   // Sub-tab under Operations configuration: 'classes' | 'courses' | 'centers' | 'exams'
   const [opsSection, setOpsSection] = useState<'classes' | 'courses' | 'centers' | 'exams'>('classes');
@@ -554,6 +753,7 @@ export default function AdminDashboard({
         <div className="flex flex-wrap bg-slate-800 p-1 rounded-lg border border-slate-700 w-full md:w-auto">
           {[
             { id: 'Analytics', label: 'Operational Overview' },
+            { id: 'Instructors', label: 'Instructors' },
             { id: 'Surveys', label: `Student Pulse (${surveys.length})` },
             { id: 'InstructorLogs', label: 'Instructor Logs' },
             { id: 'Config', label: 'Operations Hub' }
@@ -742,6 +942,498 @@ export default function AdminDashboard({
             </div>
           </motion.div>
         )}
+
+        {/* INSTRUCTORS ADMINISTRATION PANEL */}
+        {adminTab === 'Instructors' && (
+          <motion.div
+            key="instructors-admin"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="space-y-6"
+          >
+            {/* Filter Bar */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-4 items-center justify-between">
+              <div className="relative w-full md:w-72">
+                <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search name or email..."
+                  value={instructorSearch}
+                  onChange={(e) => { setInstructorSearch(e.target.value); setInstPage(1); }}
+                  className="pl-9 pr-4 py-2 w-full text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-red-500 bg-slate-50 focus:bg-white transition-all"
+                />
+              </div>
+
+              <div className="flex flex-wrap gap-3 w-full md:w-auto items-center">
+                {/* Status Filter */}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">Status:</span>
+                  <select
+                    value={instStatusFilter}
+                    onChange={(e) => { setInstStatusFilter(e.target.value); setInstPage(1); }}
+                    className="border border-slate-200 bg-slate-50 text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-red-500 cursor-pointer"
+                  >
+                    <option value="All">All Statuses</option>
+                    <option value="PENDING">Pending Approval</option>
+                    <option value="ACTIVE">Active</option>
+                    <option value="SUSPENDED">Suspended</option>
+                    <option value="REJECTED">Rejected</option>
+                  </select>
+                </div>
+
+                {/* Center Filter */}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">Center:</span>
+                  <select
+                    value={instCenterFilter}
+                    onChange={(e) => { setInstCenterFilter(e.target.value); setInstPage(1); }}
+                    className="border border-slate-200 bg-slate-50 text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-red-500 cursor-pointer"
+                  >
+                    <option value="All">All Centers</option>
+                    {config.centers.map(center => (
+                      <option key={center} value={center}>{center}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Course Filter */}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">Course:</span>
+                  <select
+                    value={instCourseFilter}
+                    onChange={(e) => { setInstCourseFilter(e.target.value); setInstPage(1); }}
+                    className="border border-slate-200 bg-slate-50 text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-red-500 cursor-pointer"
+                  >
+                    <option value="All">All Courses</option>
+                    {config.courses.flatMap(cat => cat.items).map(course => (
+                      <option key={course} value={course}>{course}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Main content grid */}
+            {instLoading ? (
+              <div className="flex flex-col items-center justify-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-500"></div>
+                <p className="text-slate-400 text-xs font-semibold mt-4">Syncing real-time records from Neon PostgreSQL...</p>
+              </div>
+            ) : instError ? (
+              <div className="bg-red-50 border border-red-200 p-4 rounded-xl text-center">
+                <p className="text-red-600 text-xs font-semibold">{instError}</p>
+                <button onClick={fetchAdminInstructors} className="mt-3 text-xs font-bold text-white bg-red-500 px-4 py-2 rounded-lg hover:bg-red-600 transition-all cursor-pointer">Retry Fetch</button>
+              </div>
+            ) : dbInstructors.length === 0 ? (
+              <div className="bg-slate-50 p-12 text-center rounded-2xl border border-dashed border-slate-200">
+                <User className="w-8 h-8 text-slate-300 mx-auto mb-3" />
+                <h3 className="text-sm font-bold text-slate-800">No Instructors Found</h3>
+                <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">No records match your selected search terms or status filters. Try resetting filters.</p>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {dbInstructors.map((inst) => {
+                    const statusColors: any = {
+                      PENDING: "bg-yellow-50 text-yellow-700 border-yellow-200",
+                      ACTIVE: "bg-emerald-50 text-emerald-700 border-emerald-200",
+                      SUSPENDED: "bg-amber-50 text-amber-700 border-amber-200",
+                      REJECTED: "bg-rose-50 text-rose-700 border-rose-200"
+                    };
+
+                    return (
+                      <div
+                        key={inst.id}
+                        className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col justify-between"
+                      >
+                        <div>
+                          <div className="flex justify-between items-start mb-4">
+                            <div>
+                              <h4 className="text-sm font-bold text-slate-900">{inst.firstName} {inst.lastName}</h4>
+                              <span className="text-[10px] text-slate-400 block mt-0.5">{inst.email}</span>
+                            </div>
+                            <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase border ${statusColors[inst.status] || "bg-slate-50 text-slate-600 border-slate-200"}`}>
+                              {inst.status}
+                            </span>
+                          </div>
+
+                          <div className="space-y-2 mt-4 text-xs text-slate-600 border-t border-slate-100 pt-3">
+                            <div className="flex justify-between">
+                              <span className="text-slate-400">Centre Scope:</span>
+                              <span className="font-semibold text-slate-800">{inst.center || "Unassigned"}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-400">Assigned Role:</span>
+                              <span className="font-semibold text-red-600 font-mono text-[10px]">{inst.role}</span>
+                            </div>
+                            <div>
+                              <span className="text-slate-400 block mb-1">Teaching Competencies:</span>
+                              <div className="flex flex-wrap gap-1">
+                                {inst.courses && inst.courses.length > 0 ? (
+                                  inst.courses.map((c: string) => (
+                                    <span key={c} className="bg-slate-100 text-slate-600 text-[9px] px-1.5 py-0.5 rounded-md font-medium">
+                                      {c}
+                                    </span>
+                                  ))
+                                ) : (
+                                  <span className="text-slate-400 italic text-[10px]">None assigned</span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={() => {
+                            setSelectedInstructor(inst);
+                            setEditFirstName(inst.firstName);
+                            setEditLastName(inst.lastName);
+                            setEditGender(inst.gender || 'Prefer not to say');
+                            setEditCenter(inst.center || '');
+                            setEditCourses(inst.courses || []);
+                            setIsEditingProfile(false);
+                            setIsDetailDrawerOpen(true);
+                          }}
+                          className="w-full mt-5 text-xs font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-lg py-2 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-all cursor-pointer"
+                        >
+                          Review &amp; Manage Profile
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Pagination bar */}
+                {instTotalPages > 1 && (
+                  <div className="flex justify-center items-center gap-4 py-4 border-t border-slate-100 mt-4">
+                    <button
+                      disabled={instPage === 1}
+                      onClick={() => setInstPage(prev => Math.max(1, prev - 1))}
+                      className="px-3.5 py-1.5 text-xs font-bold rounded-lg border border-slate-200 disabled:opacity-40 disabled:cursor-not-allowed bg-white hover:bg-slate-50 text-slate-600 transition-all cursor-pointer"
+                    >
+                      Previous
+                    </button>
+                    <span className="text-xs font-bold text-slate-500">
+                      Page {instPage} of {instTotalPages}
+                    </span>
+                    <button
+                      disabled={instPage === instTotalPages}
+                      onClick={() => setInstPage(prev => Math.min(instTotalPages, prev + 1))}
+                      className="px-3.5 py-1.5 text-xs font-bold rounded-lg border border-slate-200 disabled:opacity-40 disabled:cursor-not-allowed bg-white hover:bg-slate-50 text-slate-600 transition-all cursor-pointer"
+                    >
+                      Next
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </motion.div>
+        )}
+
+        {/* DETAILED INSTRUCTOR DRAWER */}
+        <AnimatePresence>
+          {isDetailDrawerOpen && selectedInstructor && (
+            <div className="fixed inset-0 z-50 overflow-hidden flex justify-end">
+              {/* Backdrop */}
+              <div
+                className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+                onClick={() => setIsDetailDrawerOpen(false)}
+              />
+              
+              {/* Drawer container */}
+              <motion.div
+                initial={{ x: "100%" }}
+                animate={{ x: 0 }}
+                exit={{ x: "100%" }}
+                transition={{ type: "spring", damping: 25, stiffness: 200 }}
+                className="relative w-full max-w-lg bg-white h-full shadow-2xl flex flex-col z-10 border-l border-slate-200 overflow-y-auto"
+              >
+                {/* Header */}
+                <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+                  <div>
+                    <h3 className="text-base font-extrabold text-slate-900 font-display">Instructor Administration</h3>
+                    <p className="text-xs text-slate-400 mt-0.5">UID: {selectedInstructor.id}</p>
+                  </div>
+                  <button
+                    onClick={() => setIsDetailDrawerOpen(false)}
+                    className="w-8 h-8 rounded-full bg-white border border-slate-200 text-slate-400 hover:text-slate-600 flex items-center justify-center shadow-sm cursor-pointer text-lg font-bold"
+                  >
+                    &times;
+                  </button>
+                </div>
+
+                {/* Drawer Content */}
+                <div className="p-6 space-y-6 flex-1">
+                  {/* Pending Status Banner */}
+                  {selectedInstructor.status === 'PENDING' && (
+                    <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-xl flex flex-col gap-3">
+                      <div className="flex gap-2 items-start">
+                        <ShieldCheck className="w-5 h-5 text-yellow-600 shrink-0 mt-0.5" />
+                        <div>
+                          <h4 className="text-xs font-bold text-yellow-800">Pending Profile Activation</h4>
+                          <p className="text-[11px] text-yellow-700 mt-0.5">This instructor has registered and is waiting for administrator credentials verification.</p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2.5 mt-1.5">
+                        <button
+                          onClick={() => handleApproveInstructor(selectedInstructor.id, `${selectedInstructor.firstName} ${selectedInstructor.lastName}`)}
+                          className="flex-1 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg py-1.5 transition-all cursor-pointer"
+                        >
+                          Approve Profile
+                        </button>
+                        <button
+                          onClick={() => handleRejectInstructor(selectedInstructor.id, `${selectedInstructor.firstName} ${selectedInstructor.lastName}`)}
+                          className="flex-1 text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white rounded-lg py-1.5 transition-all cursor-pointer"
+                        >
+                          Reject Profile
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Edit Form or Display Details */}
+                  {isEditingProfile ? (
+                    <div className="space-y-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                      <h4 className="text-xs font-bold text-slate-800 border-b border-slate-200 pb-2 mb-2">Edit Instructor Details</h4>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">First Name</label>
+                          <input
+                            type="text"
+                            value={editFirstName}
+                            onChange={(e) => setEditFirstName(e.target.value)}
+                            className="w-full text-xs border border-slate-200 rounded-lg p-2 bg-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Last Name</label>
+                          <input
+                            type="text"
+                            value={editLastName}
+                            onChange={(e) => setEditLastName(e.target.value)}
+                            className="w-full text-xs border border-slate-200 rounded-lg p-2 bg-white"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Gender</label>
+                        <select
+                          value={editGender}
+                          onChange={(e) => setEditGender(e.target.value)}
+                          className="w-full text-xs border border-slate-200 rounded-lg p-2 bg-white"
+                        >
+                          <option value="Male">Male</option>
+                          <option value="Female">Female</option>
+                          <option value="Prefer not to say">Prefer not to say</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Center Scope</label>
+                        <select
+                          value={editCenter}
+                          onChange={(e) => setEditCenter(e.target.value)}
+                          className="w-full text-xs border border-slate-200 rounded-lg p-2 bg-white animate-none"
+                        >
+                          <option value="">Select Center...</option>
+                          {config.centers.map(center => (
+                            <option key={center} value={center}>{center}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Teaching Competencies</label>
+                        <div className="grid grid-cols-2 gap-2 mt-1 bg-white p-3 rounded-lg border border-slate-200 max-h-36 overflow-y-auto">
+                          {config.courses.flatMap(cat => cat.items).map(course => {
+                            const checked = editCourses.includes(course);
+                            return (
+                              <label key={course} className="flex items-center gap-2 text-xs font-medium text-slate-600 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() => {
+                                    if (checked) {
+                                      setEditCourses(prev => prev.filter(c => c !== course));
+                                    } else {
+                                      setEditCourses(prev => [...prev, course]);
+                                    }
+                                  }}
+                                  className="accent-red-500 rounded"
+                                />
+                                {course}
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2.5 pt-2">
+                        <button
+                          onClick={() => handleSaveProfileEdit(selectedInstructor.id)}
+                          className="flex-1 text-xs font-bold bg-slate-900 text-white hover:bg-slate-800 rounded-lg py-2 transition-all cursor-pointer"
+                        >
+                          Save Profile
+                        </button>
+                        <button
+                          onClick={() => setIsEditingProfile(false)}
+                          className="flex-1 text-xs font-bold bg-slate-200 text-slate-700 hover:bg-slate-300 rounded-lg py-2 transition-all cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {/* Basic details cards */}
+                      <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 relative">
+                        <button
+                          onClick={() => setIsEditingProfile(true)}
+                          className="absolute right-3 top-3 text-[10px] font-bold bg-white hover:bg-slate-100 border border-slate-200 rounded px-2.5 py-1 text-slate-600 transition-all cursor-pointer"
+                        >
+                          Edit Details
+                        </button>
+                        <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-3">Instructor Profile</h4>
+                        <div className="grid grid-cols-2 gap-y-3 gap-x-2 text-xs">
+                          <div>
+                            <span className="text-slate-400 block text-[10px]">Full Name</span>
+                            <span className="font-bold text-slate-800">{selectedInstructor.firstName} {selectedInstructor.lastName}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 block text-[10px]">Email Address</span>
+                            <span className="font-bold text-slate-800">{selectedInstructor.email}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 block text-[10px]">Gender</span>
+                            <span className="font-bold text-slate-800">{selectedInstructor.gender || "Not specified"}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 block text-[10px]">Center Assigned</span>
+                            <span className="font-bold text-slate-800">{selectedInstructor.center || "Not assigned"}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Change Role Section */}
+                      <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                        <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-3">Administrative Role ({selectedInstructor.role})</h4>
+                        <div className="flex gap-2">
+                          {['INSTRUCTOR', 'ADMIN', 'SUPER_ADMIN'].map(r => (
+                            <button
+                              key={r}
+                              disabled={selectedInstructor.role === r}
+                              onClick={() => handleRoleChange(selectedInstructor.id, `${selectedInstructor.firstName} ${selectedInstructor.lastName}`, r)}
+                              className={`flex-1 text-[10px] font-bold py-1.5 rounded-lg border transition-all cursor-pointer ${
+                                selectedInstructor.role === r
+                                  ? 'bg-red-50 border-red-200 text-red-600 font-extrabold'
+                                  : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                              }`}
+                            >
+                              {r === 'INSTRUCTOR' ? 'Instructor' : r === 'ADMIN' ? 'Admin' : 'Super Admin'}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Status Management */}
+                      {selectedInstructor.status !== 'PENDING' && (
+                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 flex justify-between items-center">
+                          <div>
+                            <h4 className="text-xs font-bold text-slate-800">Account Access</h4>
+                            <p className="text-[10px] text-slate-400 mt-0.5">Toggle instructor system access credentials.</p>
+                          </div>
+                          <div>
+                            {selectedInstructor.status === 'ACTIVE' ? (
+                              <button
+                                onClick={() => handleStatusChange(selectedInstructor.id, `${selectedInstructor.firstName} ${selectedInstructor.lastName}`, 'SUSPENDED')}
+                                className="text-xs font-bold text-white bg-amber-500 hover:bg-amber-600 px-4 py-1.5 rounded-lg transition-all cursor-pointer"
+                              >
+                                Suspend Account
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleStatusChange(selectedInstructor.id, `${selectedInstructor.firstName} ${selectedInstructor.lastName}`, 'ACTIVE')}
+                                className="text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 px-4 py-1.5 rounded-lg transition-all cursor-pointer"
+                              >
+                                Reactivate Account
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Audit Logs / Activity History list inside drawer */}
+                  <div className="border-t border-slate-100 pt-5">
+                    <h4 className="text-xs font-bold text-slate-800 mb-3 flex items-center gap-1.5">
+                      <Activity className="w-4 h-4 text-slate-400" />
+                      Operational Audit History
+                    </h4>
+                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 max-h-48 overflow-y-auto space-y-2.5">
+                      <div className="flex gap-2 items-start text-[11px] text-slate-600">
+                        <span className="w-1.5 h-1.5 bg-red-500 rounded-full mt-1.5 shrink-0" />
+                        <div>
+                          <span className="font-semibold block text-slate-800">Profile Initial Registration</span>
+                          <span className="text-slate-400 text-[9px] block">Self-registration from login workspace portal</span>
+                        </div>
+                      </div>
+                      <div className="flex gap-2 items-start text-[11px] text-slate-600">
+                        <span className="w-1.5 h-1.5 bg-slate-400 rounded-full mt-1.5 shrink-0" />
+                        <div>
+                          <span className="font-semibold block text-slate-800">Competency Verification Checklist</span>
+                          <span className="text-slate-400 text-[9px] block">Assigned and calibrated by centers coordinator</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* CONFIRMATION OVERLAY MODAL */}
+        <AnimatePresence>
+          {confirmationModal && confirmationModal.isOpen && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+              <div
+                className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+                onClick={() => setConfirmationModal(null)}
+              />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="relative bg-white max-w-sm w-full rounded-2xl p-6 shadow-2xl border border-slate-200 z-10"
+              >
+                <h3 className="text-sm font-extrabold text-slate-900 font-display flex items-center gap-2 mb-2">
+                  <ShieldCheck className="w-5 h-5 text-red-500" />
+                  {confirmationModal.title}
+                </h3>
+                <p className="text-xs text-slate-500 leading-relaxed mb-6">{confirmationModal.message}</p>
+                <div className="flex gap-3 justify-end">
+                  <button
+                    onClick={() => setConfirmationModal(null)}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg transition-all cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => {
+                      confirmationModal.onConfirm();
+                    }}
+                    className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-lg transition-all cursor-pointer"
+                  >
+                    Confirm
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
 
         {/* STUDENT SURVEYS TAB */}
         {adminTab === 'Surveys' && (

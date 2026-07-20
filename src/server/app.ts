@@ -22,6 +22,7 @@ import coursesRouter from "./modules/courses/courses.routes";
 import configRouter from "./modules/config/config.routes";
 import assessmentsRouter from "./modules/assessments/assessments.routes";
 import filesRouter from "./modules/files/files.routes";
+import adminRouter from "./modules/admin/admin.routes";
 
 const app = express();
 
@@ -94,6 +95,7 @@ app.get("/api/ready", async (req, res) => {
 });
 
 // 4. Mount API Routes
+app.use("/api/v1/admin", adminRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/v1/auth", authRouter);
 app.use("/api/instructors", instructorsRouter);

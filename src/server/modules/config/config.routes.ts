@@ -4,6 +4,7 @@ import { asyncHandler } from "../../utils/async-handler";
 import { sendSuccess } from "../../utils/api-response";
 import { NotFoundError } from "../../utils/errors";
 import { requireAdmin } from "../../middleware/auth";
+import { logAudit } from "../../utils/audit";
 
 const router = Router();
 
@@ -27,6 +28,14 @@ router.put("/", requireAdmin, asyncHandler(async (req, res) => {
      WHERE key = 'default'`,
     [JSON.stringify(centers), JSON.stringify(courses), JSON.stringify(timeSlots)]
   );
+
+  await logAudit({
+    req,
+    action: "Settings changes",
+    entityType: "system_config",
+    newValues: { centers, courses, timeSlots }
+  });
+
   return sendSuccess(res, { success: true }, "System configuration updated successfully");
 }));
 
