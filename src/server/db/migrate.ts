@@ -425,6 +425,82 @@ const MIGRATIONS: Migration[] = [
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );`
     ]
+  },
+  {
+    id: "013_instructor_workspace_and_attendance_tables",
+    queries: [
+      `DO $$ 
+       BEGIN 
+         IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'session_status') THEN 
+           CREATE TYPE session_status AS ENUM ('SCHEDULED', 'COMPLETED', 'CANCELLED', 'RESCHEDULED'); 
+         END IF; 
+       END $$;`,
+      `CREATE TABLE IF NOT EXISTS class_sessions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        class_id UUID NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+        title VARCHAR(255),
+        starts_at TIMESTAMPTZ NOT NULL,
+        ends_at TIMESTAMPTZ NOT NULL,
+        location TEXT,
+        meeting_url TEXT,
+        status session_status NOT NULL DEFAULT 'SCHEDULED',
+        created_by UUID NOT NULL REFERENCES users(id),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        CHECK (ends_at > starts_at)
+      );`,
+      `DO $$ 
+       BEGIN 
+         IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'attendance_status') THEN 
+           CREATE TYPE attendance_status AS ENUM ('PRESENT', 'ABSENT', 'LATE', 'EXCUSED'); 
+         END IF; 
+       END $$;`,
+      `CREATE TABLE IF NOT EXISTS attendance_records (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        session_id UUID NOT NULL REFERENCES class_sessions(id) ON DELETE CASCADE,
+        student_id UUID NOT NULL REFERENCES users(id),
+        status attendance_status NOT NULL,
+        arrival_time TIMESTAMPTZ,
+        note TEXT,
+        recorded_by UUID NOT NULL REFERENCES users(id),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE(session_id, student_id)
+      );`,
+      `DO $$ 
+       BEGIN 
+         IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'weekly_log_status') THEN 
+           CREATE TYPE weekly_log_status AS ENUM ('DRAFT', 'SUBMITTED', 'UNDER_REVIEW', 'RETURNED', 'APPROVED'); 
+         END IF; 
+       END $$;`,
+      `CREATE TABLE IF NOT EXISTS weekly_logs_new (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        class_id UUID NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+        instructor_id UUID NOT NULL REFERENCES users(id),
+        week_start DATE NOT NULL,
+        week_end DATE NOT NULL,
+        hours_logged NUMERIC(6,2) NOT NULL,
+        achievements TEXT,
+        challenges TEXT,
+        support_required TEXT,
+        status weekly_log_status NOT NULL DEFAULT 'DRAFT',
+        submitted_at TIMESTAMPTZ,
+        reviewed_by UUID REFERENCES users(id),
+        reviewed_at TIMESTAMPTZ,
+        review_comment TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE(class_id, instructor_id, week_start),
+        CHECK (week_end >= week_start),
+        CHECK (hours_logged >= 0 AND hours_logged <= 168)
+      );`,
+      `CREATE TABLE IF NOT EXISTS weekly_log_modules (
+        weekly_log_id UUID NOT NULL REFERENCES weekly_logs_new(id) ON DELETE CASCADE,
+        module_id UUID NOT NULL REFERENCES course_modules(id),
+        coverage_note TEXT,
+        PRIMARY KEY(weekly_log_id, module_id)
+      );`
+    ]
   }
 ];
 

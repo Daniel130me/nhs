@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   LogIn,
@@ -30,9 +30,22 @@ import {
   Loader2,
   Check,
   Save,
-  RotateCcw
+  RotateCcw,
+  LayoutDashboard,
+  Users,
+  GraduationCap,
+  Settings,
+  Mail,
+  Sliders,
+  User
 } from 'lucide-react';
 import { Instructor, Class, WeeklyLog, SystemConfig, Course, Lesson, Resource, ExamAttempt } from '../types';
+
+// Import newly created modular workspace subcomponents
+import InstructorDashboardView from './instructor/InstructorDashboardView';
+import ClassSessionsView from './instructor/ClassSessionsView';
+import ClassAttendanceView from './instructor/ClassAttendanceView';
+import ClassWeeklyLogsView from './instructor/ClassWeeklyLogsView';
 
 interface InstructorPortalProps {
   config: SystemConfig;
@@ -87,10 +100,50 @@ export default function InstructorPortal({
   const [regCenter, setRegCenter] = useState('');
   const [regSelectedCourses, setRegSelectedCourses] = useState<string[]>([]);
 
-  // Workspace sub-tabs: 'classes' | 'curriculum' | 'competency' | 'settings'
-  const [portalTab, setPortalTab] = useState<'classes' | 'curriculum' | 'competency' | 'settings'>('classes');
+  // ---- INTEGRATED CLIENT SIDE PATH ROUTING ----
+  const [currentPath, setCurrentPath] = useState(() => {
+    const path = window.location.pathname;
+    return path.startsWith('/instructor') ? path : '/instructor/dashboard';
+  });
 
-  // Class Setup states
+  const navigateTo = (path: string) => {
+    setCurrentPath(path);
+    window.history.pushState(null, '', path);
+  };
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const path = window.location.pathname;
+      if (path.startsWith('/instructor')) {
+        setCurrentPath(path);
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  const parsePath = (path: string) => {
+    const parts = path.split('?')[0].split('/').filter(Boolean); // e.g. ['instructor', 'classes', 'some-id', 'attendance']
+    const queryParams: Record<string, string> = {};
+    const queryStr = path.split('?')[1];
+    if (queryStr) {
+      queryStr.split('&').forEach(pair => {
+        const [k, v] = pair.split('=');
+        if (k && v) queryParams[k] = decodeURIComponent(v);
+      });
+    }
+
+    return {
+      section: parts[1] || 'dashboard', // 'dashboard', 'classes', 'assignments', 'gradebook', 'resources', 'calendar', 'profile', 'competency'
+      classId: parts[2] || null,
+      subSection: parts[3] || null,
+      queryParams
+    };
+  };
+
+  const { section, classId, subSection, queryParams } = parsePath(currentPath);
+
+  // States from original Classes Setup View
   const [showAddClass, setShowAddClass] = useState(false);
   const [classFormMode, setClassFormMode] = useState<'create' | 'edit'>('create');
   const [editingClassId, setEditingClassId] = useState<string | null>(null);
@@ -107,7 +160,7 @@ export default function InstructorPortal({
   const [classSetupError, setClassSetupError] = useState('');
   const [classSuccessMessage, setClassSuccessMessage] = useState('');
 
-  // Settings & Security form states
+  // Settings & Security form states (original Settings Tab)
   const [currentPasswordChange, setCurrentPasswordChange] = useState('');
   const [newPasswordChange, setNewPasswordChange] = useState('');
   const [confirmPasswordChange, setConfirmPasswordChange] = useState('');
@@ -115,44 +168,92 @@ export default function InstructorPortal({
   const [passwordSuccess, setPasswordSuccess] = useState('');
   const [isPasswordLoading, setIsPasswordLoading] = useState(false);
 
-  // Weekly Log states
-  const [selectedClassForLog, setSelectedClassForLog] = useState<Class | null>(null);
-  const [logHours, setLogHours] = useState<number>(4);
-  const [logModulesCovered, setLogModulesCovered] = useState<string[]>([]);
-  const [logChallenges, setLogChallenges] = useState('');
-  const [logError, setLogError] = useState('');
-  const [logSuccessMessage, setLogSuccessMessage] = useState('');
-
-  // Active filter for classes list
+  // Class filtering state
   const [classFilter, setClassFilter] = useState<'Active' | 'Completed' | 'All'>('Active');
 
-  // ---- SECURE MEDIA READER STATES ----
+  // Study decks (Original curriculum Tab) state
   const [activeResource, setActiveResource] = useState<Resource | null>(null);
   const [activeResourceLesson, setActiveResourceLesson] = useState<string>('');
-  
-  // Slides Player state
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
-
-  // Simulated Video Player state
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
   const [videoPlaybackProgress, setVideoPlaybackProgress] = useState(0);
 
-  // ---- COMPETENCY EXAMS STATES ----
+  // Competency Exams (Original competency Tab) state
   const [takingExamCourse, setTakingExamCourse] = useState<Course | null>(null);
   const [examQuestions, setExamQuestions] = useState<any[]>([]);
-  const [examAnswers, setExamAnswers] = useState<Record<string, number>>({}); // qId -> selectedIndex
-  const [examTimer, setExamTimer] = useState<number>(1200); // 20 minutes in seconds
+  const [examAnswers, setExamAnswers] = useState<Record<string, number>>({});
+  const [examTimer, setExamTimer] = useState<number>(1200);
   const [examTimerInterval, setExamTimerInterval] = useState<any>(null);
-  
   const [isExamLoading, setIsExamLoading] = useState(false);
   const [examLoadError, setExamLoadError] = useState('');
-  
-  // Grading Modal state
   const [isExamGrading, setIsExamGrading] = useState(false);
   const [gradedResult, setGradedResult] = useState<any | null>(null);
   const [showGradedDetails, setShowGradedDetails] = useState(false);
 
-  // ---- AUTH HANDLERS ----
+  // ---- FETCH INTEGRATED DATABASE WORKSPACE STATES FOR DASHBOARD ----
+  const [dbWeeklyLogs, setDbWeeklyLogs] = useState<any[]>([]);
+  const [dbSessions, setDbSessions] = useState<any[]>([]);
+  const [dbStudents, setDbStudents] = useState<any[]>([]);
+  const [classAttendanceStats, setClassAttendanceStats] = useState<Record<string, any[]>>({});
+
+  useEffect(() => {
+    if (!currentInstructor) return;
+
+    const fetchAllWorkspaceData = async () => {
+      try {
+        const logsRes = await fetch('/api/logs');
+        if (logsRes.ok) {
+          const logsData = await logsRes.json();
+          setDbWeeklyLogs(logsData.data || []);
+        }
+
+        const assignedClasses = classes.filter(c => c.instructorId === currentInstructor.id);
+        const allSess: any[] = [];
+        const attendanceMap: Record<string, any[]> = {};
+        const studentsMap: Record<string, any[]> = {};
+
+        for (const cls of assignedClasses) {
+          const sessRes = await fetch(`/api/classes/${cls.id}/sessions`);
+          if (sessRes.ok) {
+            const sessData = await sessRes.json();
+            allSess.push(...(sessData.data || []));
+          }
+
+          const attRes = await fetch(`/api/classes/${cls.id}/attendance-summary`);
+          if (attRes.ok) {
+            const attData = await attRes.json();
+            attendanceMap[cls.id] = attData.data || [];
+          }
+
+          const studRes = await fetch(`/api/classes/${cls.id}/students`);
+          if (studRes.ok) {
+            const studData = await studRes.json();
+            studentsMap[cls.id] = studData.data || [];
+          }
+        }
+
+        setDbSessions(allSess);
+        setClassAttendanceStats(attendanceMap);
+        const uniqueStudents: any[] = [];
+        const seenIds = new Set();
+        Object.values(studentsMap).forEach(list => {
+          list.forEach(s => {
+            if (!seenIds.has(s.id)) {
+              seenIds.add(s.id);
+              uniqueStudents.push(s);
+            }
+          });
+        });
+        setDbStudents(uniqueStudents);
+      } catch (err) {
+        console.error("Error loading operational dashboard states:", err);
+      }
+    };
+
+    fetchAllWorkspaceData();
+  }, [currentInstructor, classes, logs]);
+
+  // ---- SECURED AUTHENTICATION EVENT HANDLERS ----
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!emailInput.trim()) {
@@ -174,6 +275,7 @@ export default function InstructorPortal({
         setLoginError('');
         setEmailInput('');
         setPasswordInput('');
+        navigateTo('/instructor/dashboard');
       }
     } catch (err: any) {
       setLoginError(err.message || 'Authentication failed. Please try again.');
@@ -203,115 +305,72 @@ export default function InstructorPortal({
         email: regEmail.trim().toLowerCase(),
         password: regPassword,
         gender: regGender,
-        center: isAdminAuthMode ? 'Headquarters' : regCenter,
-        courses: isAdminAuthMode ? [] : regSelectedCourses,
-        role: isAdminAuthMode ? 'Admin' : 'Instructor'
+        center: isAdminAuthMode ? 'Operations HQ' : regCenter,
+        courses: regSelectedCourses,
+        role: isAdminAuthMode ? 'Admin' : 'Instructor',
       });
 
-      setRegFirstName('');
-      setRegLastName('');
-      setRegEmail('');
-      setRegPassword('');
-      setRegGender('Prefer not to say');
-      setRegCenter('');
-      setRegSelectedCourses([]);
-      setIsRegistering(false);
-      setLoginError('');
-      if (registered && registered.status === 'Deactivated') {
-        setRegistrationSuccess('Instructor profile registered successfully! Your account is currently pending activation by an Administrator. Please contact your administrator to authorize your login.');
-      } else {
-        setRegistrationSuccess('Admin account registered and session authenticated successfully!');
+      if (registered) {
+        setRegistrationSuccess('Profile registered successfully! Administrative status is currently PENDING ACTIVATION.');
+        setIsRegistering(false);
+        setRegFirstName('');
+        setRegLastName('');
+        setRegEmail('');
+        setRegPassword('');
+        setRegSelectedCourses([]);
       }
     } catch (err: any) {
-      setLoginError(err.message || 'Registration failed. Please try again.');
+      setLoginError(err.message || 'Registration failed. Check if email is already in use.');
     } finally {
       setIsAuthLoading(false);
     }
   };
 
-  const handleChangePasswordSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!currentPasswordChange || !newPasswordChange || !confirmPasswordChange) {
-      setPasswordError('Please fill in all password fields.');
-      return;
-    }
-    if (newPasswordChange !== confirmPasswordChange) {
-      setPasswordError('New passwords do not match.');
-      return;
-    }
-    if (newPasswordChange.length < 6) {
-      setPasswordError('New password must be at least 6 characters long.');
-      return;
-    }
-
-    setIsPasswordLoading(true);
-    setPasswordError('');
-    setPasswordSuccess('');
-
-    try {
-      const response = await fetch('/api/auth/change-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          instructorId: currentInstructor?.id,
-          currentPassword: currentPasswordChange,
-          newPassword: newPasswordChange
-        })
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to update password');
-      }
-
-      setPasswordSuccess('Password securely updated successfully!');
-      setCurrentPasswordChange('');
-      setNewPasswordChange('');
-      setConfirmPasswordChange('');
-    } catch (err: any) {
-      setPasswordError(err.message || 'An error occurred while changing your password.');
-    } finally {
-      setIsPasswordLoading(false);
-    }
-  };
-
-  const toggleCourseApproval = (course: string) => {
-    setRegSelectedCourses((prev) =>
-      prev.includes(course) ? prev.filter((c) => c !== course) : [...prev, course]
+  const toggleRegCourse = (courseName: string) => {
+    setRegSelectedCourses(prev =>
+      prev.includes(courseName)
+        ? prev.filter(c => c !== courseName)
+        : [...prev, courseName]
     );
   };
 
-  // ---- CLASS CRUD HANDLERS ----
+  // ---- CLASSES CREATOR / EDITOR HANDLERS ----
   const handleCreateClassSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newCourseName || !newClassroom || !newTimeSlot || !newModulesText.trim()) {
-      setClassSetupError('All fields including the modules syllabus are required.');
+    setClassSetupError('');
+    setClassSuccessMessage('');
+
+    if (!newCourseName) {
+      setClassSetupError('Please select a course syllabus');
+      return;
+    }
+    if (!newClassroom.trim()) {
+      setClassSetupError('Classroom or lab identifier is required');
       return;
     }
     if (newDays.length === 0) {
-      setClassSetupError('Please select at least one schedule day.');
+      setClassSetupError('Please select at least one day of the week');
+      return;
+    }
+    if (new Date(newEndDate) <= new Date(newStartDate)) {
+      setClassSetupError('End Date must be after the Start Date');
       return;
     }
 
     const parsedModules = newModulesText
       .split('\n')
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0)
-      .map((line, index) => ({
-        id: `mod-${Date.now()}-${index}`,
+      .map(line => line.trim())
+      .filter(line => line.length > 0)
+      .map((line, idx) => ({
+        id: `mod-${idx + 1}-${Date.now()}`,
         name: line,
         done: false
       }));
 
-    if (parsedModules.length === 0) {
-      setClassSetupError('Syllabus must have at least one module line.');
-      return;
-    }
-
     if (classFormMode === 'create') {
       onCreateClass({
         courseName: newCourseName,
-        totalDurationHours: Number(newTotalDuration),
+        totalDurationHours: newTotalDuration,
         classroom: newClassroom,
         scheduleType: newScheduleType,
         days: newDays,
@@ -321,171 +380,134 @@ export default function InstructorPortal({
         modules: parsedModules,
         status: 'Active'
       });
-      setClassSuccessMessage('Class created successfully!');
-    } else if (classFormMode === 'edit' && editingClassId) {
-      const prevClass = classes.find(c => c.id === editingClassId);
-      onEditClass({
-        id: editingClassId,
-        courseName: newCourseName,
-        instructorId: currentInstructor?.id || '',
-        instructorName: `${currentInstructor?.firstName} ${currentInstructor?.lastName}`,
-        totalDurationHours: Number(newTotalDuration),
-        classroom: newClassroom,
-        scheduleType: newScheduleType,
-        days: newDays,
-        timeSlot: newTimeSlot,
-        startDate: newStartDate,
-        endDate: newEndDate,
-        modules: prevClass ? prevClass.modules : parsedModules,
-        status: prevClass ? prevClass.status : 'Active',
-        createdAt: prevClass ? prevClass.createdAt : new Date().toISOString()
-      });
-      setClassSuccessMessage('Class configuration updated successfully!');
+      setClassSuccessMessage('Classroom setup created and synchronized successfully!');
+    } else {
+      if (editingClassId) {
+        onEditClass({
+          id: editingClassId,
+          courseName: newCourseName,
+          instructorId: currentInstructor?.id || '',
+          instructorName: `${currentInstructor?.firstName} ${currentInstructor?.lastName}`,
+          totalDurationHours: newTotalDuration,
+          classroom: newClassroom,
+          scheduleType: newScheduleType,
+          days: newDays,
+          timeSlot: newTimeSlot,
+          startDate: newStartDate,
+          endDate: newEndDate,
+          modules: parsedModules,
+          status: 'Active',
+          createdAt: new Date().toISOString()
+        });
+        setClassSuccessMessage('Classroom setup updated successfully!');
+      }
     }
 
-    setNewCourseName('');
-    setNewTotalDuration(40);
-    setNewClassroom('');
-    setNewScheduleType('Weekday');
-    setNewDays([]);
-    setNewTimeSlot('Morning');
-    setNewStartDate('2026-07-15');
-    setNewEndDate('2026-08-15');
-    setNewModulesText('');
-    setClassSetupError('');
-    setEditingClassId(null);
     setShowAddClass(false);
-    setTimeout(() => setClassSuccessMessage(''), 3000);
-  };
-
-  const handleEditClassClick = (cls: Class) => {
-    setClassFormMode('edit');
-    setEditingClassId(cls.id);
-    setNewCourseName(cls.courseName);
-    setNewTotalDuration(cls.totalDurationHours);
-    setNewClassroom(cls.classroom);
-    setNewScheduleType(cls.scheduleType);
-    setNewDays(cls.days);
-    setNewTimeSlot(cls.timeSlot);
-    setNewStartDate(cls.startDate || '2026-07-15');
-    setNewEndDate(cls.endDate || '2026-08-15');
-    setNewModulesText(cls.modules.map(m => m.name).join('\n'));
-    setShowAddClass(true);
+    setEditingClassId(null);
+    setTimeout(() => setClassSuccessMessage(''), 5000);
   };
 
   const toggleClassDay = (day: string) => {
-    setNewDays((prev) =>
-      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]
+    setNewDays(prev =>
+      prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]
     );
   };
 
-  // ---- WEEKLY LOG COMPLIANCE SUBMISSIONS ----
-  const openWeeklyLogForm = (cls: Class) => {
-    setSelectedClassForLog(cls);
-    setLogHours(4);
-    setLogModulesCovered([]);
-    setLogChallenges('');
-    setLogError('');
-    setLogSuccessMessage('');
-  };
-
-  const toggleLogModule = (moduleId: string) => {
-    setLogModulesCovered((prev) =>
-      prev.includes(moduleId) ? prev.filter((id) => id !== moduleId) : [...prev, moduleId]
-    );
-  };
-
-  const handleWeeklyLogSubmit = (e: React.FormEvent) => {
+  // ---- SECURITY PASSWORD UPDATES HANDLER ----
+  const handlePasswordChangeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedClassForLog) return;
+    setPasswordError('');
+    setPasswordSuccess('');
 
-    const previousLogs = logs.filter((l) => l.classId === selectedClassForLog.id);
-    const nextWeekNumber = previousLogs.length + 1;
-
-    const result = onSubmitLog({
-      classId: selectedClassForLog.id,
-      weekNumber: nextWeekNumber,
-      hoursLogged: Number(logHours),
-      modulesCoveredThisWeek: logModulesCovered,
-      challenges: logChallenges
-    });
-
-    if (!result.ok) {
-      setLogError(result.error || 'Failed to submit log.');
-    } else {
-      setLogSuccessMessage(`Week ${nextWeekNumber} report submitted successfully!`);
-      setTimeout(() => {
-        setSelectedClassForLog(null);
-        setLogSuccessMessage('');
-      }, 1500);
+    if (!currentPasswordChange || !newPasswordChange || !confirmPasswordChange) {
+      setPasswordError('All fields are required.');
+      return;
     }
-  };
 
-  // ---- SECURE VIEW-ONLY RESOURCE PLAYERS ----
-  const handleOpenResource = (res: Resource, lessonTitle: string) => {
-    setActiveResource(res);
-    setActiveResourceLesson(lessonTitle);
-    setCurrentSlideIndex(0);
-    setIsVideoPlaying(false);
-    setVideoPlaybackProgress(0);
-  };
-
-  // Video playback simulator ticker
-  React.useEffect(() => {
-    let interval: any;
-    if (activeResource?.type === 'video' && isVideoPlaying) {
-      interval = setInterval(() => {
-        setVideoPlaybackProgress(prev => {
-          if (prev >= 100) {
-            setIsVideoPlaying(false);
-            return 100;
-          }
-          return prev + 1.5;
-        });
-      }, 1000);
+    if (newPasswordChange !== confirmPasswordChange) {
+      setPasswordError('New password and confirmation do not match.');
+      return;
     }
-    return () => clearInterval(interval);
-  }, [activeResource, isVideoPlaying]);
 
-  // ---- EXAM PORTAL ACTIONS ----
-  const handleStartExam = async (course: Course) => {
-    setTakingExamCourse(course);
-    setIsExamLoading(true);
-    setExamLoadError('');
-    setExamAnswers({});
-    setExamTimer(1200); // 20 mins
+    if (newPasswordChange.length < 6) {
+      setPasswordError('New password must be at least 6 characters.');
+      return;
+    }
 
+    setIsPasswordLoading(true);
     try {
-      const response = await fetch('/api/gemini/generate-exam', {
+      const response = await fetch('/api/auth/change-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          courseName: course.name,
-          lessons: course.lessons
+          currentPassword: currentPasswordChange,
+          newPassword: newPasswordChange
         })
       });
 
+      if (response.ok) {
+        setPasswordSuccess('Password updated successfully! Write down your credentials.');
+        setCurrentPasswordChange('');
+        setNewPasswordChange('');
+        setConfirmPasswordChange('');
+      } else {
+        const errData = await response.json();
+        setPasswordError(errData.message || 'Change password failed. Ensure your current password is correct.');
+      }
+    } catch (err) {
+      setPasswordError('Network error. Check server log.');
+    } finally {
+      setIsPasswordLoading(false);
+    }
+  };
+
+  // ---- SYLLABUS MEDIA PLAYERS HELPERS ----
+  const startSlideDeck = (resource: Resource, lessonTitle: string) => {
+    setActiveResource(resource);
+    setActiveResourceLesson(lessonTitle);
+    setCurrentSlideIndex(0);
+  };
+
+  const startVideoPlayer = (resource: Resource, lessonTitle: string) => {
+    setActiveResource(resource);
+    setActiveResourceLesson(lessonTitle);
+    setIsVideoPlaying(true);
+    setVideoPlaybackProgress(0);
+  };
+
+  // ---- AI EXAMS TESTING HANDLERS ----
+  const startCompetencyExam = async (course: Course) => {
+    setIsExamLoading(true);
+    setExamLoadError('');
+    setGradedResult(null);
+    setShowGradedDetails(false);
+
+    try {
+      const response = await fetch(`/api/exams/generate-exam`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ courseName: course.name })
+      });
+
       if (!response.ok) {
-        throw new Error('Exam compilation failed on server');
+        const err = await response.json();
+        throw new Error(err.message || 'Failed to fetch certified exam.');
       }
 
-      const examData = await response.json();
-      const loadedQuestions = examData.fallback ? examData.fallback.questions : examData.questions;
+      const resData = await response.json();
+      const payload = resData.data;
 
-      if (!loadedQuestions || loadedQuestions.length === 0) {
-        throw new Error('No evaluation questions compiled.');
-      }
+      setTakingExamCourse(course);
+      setExamQuestions(payload.questions || []);
+      setExamAnswers({});
+      setExamTimer(1200);
 
-      setExamQuestions(loadedQuestions);
-      setIsExamLoading(false);
-
-      // Start Countdown Timer
+      if (examTimerInterval) clearInterval(examTimerInterval);
       const interval = setInterval(() => {
-        setExamTimer((prev) => {
+        setExamTimer(prev => {
           if (prev <= 1) {
             clearInterval(interval);
-            // Auto submit
-            handleAutoSubmitExam();
             return 0;
           }
           return prev - 1;
@@ -494,374 +516,247 @@ export default function InstructorPortal({
       setExamTimerInterval(interval);
 
     } catch (err: any) {
-      console.error(err);
-      setExamLoadError(err.message || 'Server pipeline error generating competency questions.');
+      setExamLoadError(err.message || 'Failed to initialize testing environment.');
+    } finally {
       setIsExamLoading(false);
     }
   };
 
-  const handleAutoSubmitExam = () => {
-    clearInterval(examTimerInterval);
-    triggerGrading();
+  const handleSelectExamAnswer = (questionId: string, index: number) => {
+    setExamAnswers(prev => ({
+      ...prev,
+      [questionId]: index
+    }));
   };
 
-  const handleManualSubmitExam = () => {
-    if (confirm('Are you sure you want to conclude and submit your evaluation exam?')) {
-      clearInterval(examTimerInterval);
-      triggerGrading();
-    }
-  };
-
-  const triggerGrading = async () => {
-    if (!takingExamCourse || !currentInstructor) return;
+  const submitExamForGrading = async () => {
+    if (examTimerInterval) clearInterval(examTimerInterval);
     setIsExamGrading(true);
-    setGradedResult(null);
-
-    // Identify current trial number
-    const prevAttempts = examAttempts.filter(
-      a => a.instructorId === currentInstructor.id && a.courseName === takingExamCourse.name
-    );
-    const trialNumber = prevAttempts.length + 1;
 
     try {
-      const response = await fetch('/api/gemini/grade-exam', {
+      const formattedAnswers = Object.entries(examAnswers).map(([qId, index]) => ({
+        questionId: qId,
+        selectedIndex: index
+      }));
+
+      const response = await fetch(`/api/exams/grade-exam`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          questions: examQuestions,
-          answers: examAnswers,
-          courseName: takingExamCourse.name
+          courseName: takingExamCourse?.name,
+          answers: formattedAnswers
         })
       });
 
-      if (!response.ok) {
-        throw new Error('AI Assessor pipeline failed to grade submission');
+      if (response.ok) {
+        const resData = await response.json();
+        const result = resData.data;
+        setGradedResult(result);
+
+        onAddExamAttempt({
+          id: `attempt-${Date.now()}`,
+          instructorId: currentInstructor?.id || '',
+          courseName: takingExamCourse?.name || '',
+          trialNumber: examAttempts.filter(e => e.courseName === takingExamCourse?.name).length + 1,
+          score: result.score,
+          passed: result.passed,
+          feedback: result.evaluativeFeedback || 'Evaluation complete.',
+          takenAt: new Date().toISOString()
+        });
+      } else {
+        const errData = await response.json();
+        alert(errData.message || 'LMS Grading offline.');
       }
-
-      const gradingResult = await response.json();
-      
-      // Save attempt
-      const savedAttempt: ExamAttempt = {
-        id: `eval-${Date.now()}`,
-        instructorId: currentInstructor.id,
-        courseName: takingExamCourse.name,
-        trialNumber,
-        score: gradingResult.score,
-        passed: gradingResult.passed,
-        feedback: gradingResult.feedback,
-        takenAt: new Date().toISOString()
-      };
-
-      onAddExamAttempt(savedAttempt);
-      setGradedResult(gradingResult);
+    } catch (err) {
+      alert('Grading connection failed.');
+    } finally {
       setIsExamGrading(false);
-    } catch (err: any) {
-      console.error(err);
-      alert('AI Assessor Grading Error: ' + err.message + '. Standard fallback grading is processing.');
-      
-      // Fallback Algorithmic grading on failure
-      let correct = 0;
-      examQuestions.forEach(q => {
-        if (examAnswers[q.id] === q.correctOptionIndex) {
-          correct++;
-        }
-      });
-      const scorePct = Math.round((correct / examQuestions.length) * 100);
-      const passed = scorePct >= 70;
-      const feedbackText = passed 
-        ? `Congratulations! You successfully answered ${correct} out of ${examQuestions.length} questions correctly, scoring ${scorePct}%. You are certified.`
-        : `You scored ${scorePct}%, which is below the 70% threshold. Please review slides and retake the evaluation.`;
-
-      const savedAttempt: ExamAttempt = {
-        id: `eval-fb-${Date.now()}`,
-        instructorId: currentInstructor.id,
-        courseName: takingExamCourse.name,
-        trialNumber,
-        score: scorePct,
-        passed,
-        feedback: feedbackText,
-        takenAt: new Date().toISOString()
-      };
-
-      onAddExamAttempt(savedAttempt);
-      setGradedResult({
-        score: scorePct,
-        passed,
-        feedback: feedbackText,
-        results: examQuestions.map(q => ({
-          questionId: q.id,
-          questionText: q.questionText,
-          correct: examAnswers[q.id] === q.correctOptionIndex,
-          userAnswer: examAnswers[q.id] !== undefined ? q.options[examAnswers[q.id]] : 'None',
-          correctAnswer: q.options[q.correctOptionIndex],
-          explanation: q.explanation
-        }))
-      });
-      setIsExamGrading(false);
+      setTakingExamCourse(null);
     }
   };
 
-  // Close exam portal
-  const closeExamPortal = () => {
-    if (examTimerInterval) clearInterval(examTimerInterval);
-    setTakingExamCourse(null);
-    setExamQuestions([]);
-    setExamAnswers({});
-    setGradedResult(null);
-    setShowGradedDetails(false);
-  };
-
-  // Filtered Instructor Classes
-  const instructorClasses = classes
-    .filter((cls) => cls.instructorId === currentInstructor?.id)
-    .filter((cls) => {
-      if (classFilter === 'All') return true;
-      return cls.status === classFilter;
-    });
-
-  // Render Formatted Slide
-  const renderSlideContent = (content: string, index: number) => {
-    const slides = content.split('\n');
-    const slideText = slides[index] || slides[0] || 'End of slide deck.';
-    return (
-      <div className="bg-slate-900 border border-slate-800 text-white rounded-xl p-8 h-64 flex flex-col justify-center text-center shadow-lg select-none relative overflow-hidden">
-        <div className="absolute top-3 left-4 text-[10px] text-red-400 uppercase tracking-widest font-extrabold">Slide {index + 1} of {slides.length}</div>
-        <div className="absolute top-3 right-4 text-[10px] text-slate-500">View-Only presentation</div>
-        <p className="text-sm font-bold leading-relaxed max-w-lg mx-auto">{slideText}</p>
-        <div className="absolute bottom-3 left-0 right-0 text-[8px] text-slate-600 font-bold tracking-widest uppercase">
-          New Horizons Training Centers • Secure Slide Deck
-        </div>
-      </div>
-    );
-  };
-
-  // Authentication Required Screen
+  // Render Login and Registration Screens if unauthorized
   if (!currentInstructor) {
     return (
-      <div className={`max-w-md mx-auto my-12 bg-white border rounded-2xl shadow-xl overflow-hidden transition-all duration-300 ${
-        isAdminAuthMode ? 'border-slate-800 shadow-slate-900/15' : 'border-slate-200'
-      }`}>
-        {/* LOGIN AND REGISTER FORMS */}
-        <div className="p-8 relative">
-          <div className="text-center mb-8">
-            <div 
-              onDoubleClick={() => setIsAdminAuthMode(!isAdminAuthMode)}
-              className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl font-bold mx-auto mb-4 border transition-all duration-300 cursor-pointer select-none ${
-                isAdminAuthMode 
-                  ? 'bg-slate-900 text-amber-400 border-slate-700 hover:scale-105 shadow-md' 
-                  : 'bg-red-100 text-red-500 border-red-200 hover:scale-105'
-              }`}
-              title="Double click for Admin Auth Portal"
-            >
-              NH
-            </div>
-            <h3 
-              onClick={() => {
-                const clicks = (window as any)._logoClicks || 0;
-                if (clicks >= 2) {
-                  setIsAdminAuthMode(!isAdminAuthMode);
-                  (window as any)._logoClicks = 0;
-                } else {
-                  (window as any)._logoClicks = clicks + 1;
-                }
-              }}
-              className="text-lg font-bold font-display text-slate-900 cursor-pointer select-none"
-            >
-              {isAdminAuthMode ? 'Authorized Admin Portal' : 'Authorized Instructor Portal'}
-            </h3>
-            <p className="text-xs text-slate-400 mt-1">
-              {isAdminAuthMode 
-                ? 'Please enter your registered administrative credentials' 
-                : 'Please enter your registered center email to unlock operations'}
-            </p>
+      <div className="max-w-md mx-auto my-12 bg-white border border-slate-200 rounded-3xl shadow-xl overflow-hidden relative">
+        <div className="bg-slate-900 py-8 px-6 text-center text-white relative">
+          <div className="w-12 h-12 bg-red-500 rounded-2xl flex items-center justify-center text-lg font-bold mx-auto mb-3 shadow-md">
+            NH
           </div>
+          <h3 className="text-lg font-bold font-display uppercase tracking-widest leading-none">
+            {isRegistering ? 'Register Instructor Account' : 'Secure Staff Login'}
+          </h3>
+          <p className="text-slate-400 text-[10px] uppercase tracking-wider mt-2">
+            New Horizons Computer Learning Centers • Operations Portal
+          </p>
+        </div>
 
+        <div className="p-8">
           {loginError && (
-            <div className="mb-6 p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-xs flex items-center gap-2">
+            <div className="p-3 bg-red-50 border border-red-200 text-red-800 rounded-xl text-xs flex items-center gap-2 mb-6">
               <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
               <span>{loginError}</span>
             </div>
           )}
 
           {registrationSuccess && (
-            <div className="mb-6 p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-800 text-xs flex items-start gap-2">
-              <CheckSquare className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+            <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs flex items-center gap-2 mb-6">
+              <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
               <span>{registrationSuccess}</span>
             </div>
           )}
 
           {!isRegistering ? (
-            /* LOGIN SCREEN */
+            /* SECURE LOGIN FORM */
             <form onSubmit={handleLoginSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  {isAdminAuthMode ? 'Admin Email Address' : 'Center Email Address'}
-                </label>
-                <div className="relative">
-                  <input
-                    type="email"
-                    required
-                    value={emailInput}
-                    onChange={(e) => setEmailInput(e.target.value)}
-                    placeholder={isAdminAuthMode ? 'admin@newhorizons.com' : 'instructor@newhorizons.com'}
-                    className="w-full p-2.5 border border-slate-300 rounded-lg text-xs"
-                  />
-                </div>
+                <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wide mb-1.5">Authorized Email</label>
+                <input
+                  type="email"
+                  required
+                  placeholder="e.g. instructor@newhorizons.com"
+                  value={emailInput}
+                  onChange={(e) => setEmailInput(e.target.value)}
+                  className="w-full p-2.5 border border-slate-300 rounded-xl text-xs text-slate-800 focus:outline-none focus:border-red-500"
+                />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Password</label>
-                <div className="relative">
-                  <input
-                    type="password"
-                    required
-                    value={passwordInput}
-                    onChange={(e) => setPasswordInput(e.target.value)}
-                    placeholder="••••••••"
-                    className="w-full p-2.5 border border-slate-300 rounded-lg text-xs"
-                  />
-                </div>
-                {!isAdminAuthMode && (
-                  <p className="text-[10px] text-slate-400 mt-1">Default seeded accounts use password: <code className="font-mono bg-slate-100 px-1 py-0.5 rounded text-red-500">password123</code></p>
-                )}
+                <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wide mb-1.5">Portal Password</label>
+                <input
+                  type="password"
+                  required
+                  placeholder="••••••••"
+                  value={passwordInput}
+                  onChange={(e) => setPasswordInput(e.target.value)}
+                  className="w-full p-2.5 border border-slate-300 rounded-xl text-xs text-slate-800 focus:outline-none focus:border-red-500"
+                />
               </div>
 
               <button
                 type="submit"
                 disabled={isAuthLoading}
-                className={`w-full py-2.5 text-white font-bold text-xs rounded-lg shadow cursor-pointer disabled:cursor-not-allowed transition-all flex items-center justify-center gap-1.5 ${
-                  isAdminAuthMode 
-                    ? 'bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300' 
-                    : 'bg-red-500 hover:bg-red-600 disabled:bg-slate-300'
-                }`}
+                className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-500 text-white font-extrabold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm"
               >
                 {isAuthLoading ? (
                   <>
-                    <Loader2 className="w-4 h-4 animate-spin" /> Authenticating...
+                    <Loader2 className="w-4 h-4 animate-spin" /> Verifying Credentials...
                   </>
                 ) : (
                   <>
-                    <LogIn className="w-4 h-4" /> {isAdminAuthMode ? 'Authenticate Admin Account' : 'Authenticate Account'}
+                    <LogIn className="w-4 h-4" /> Sign In to Workspace
                   </>
                 )}
               </button>
 
-              <div className="border-t border-slate-100 pt-4 text-center">
+              <div className="text-center pt-4 border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={() => {
-                    setIsRegistering(true);
-                    setLoginError('');
-                    setRegistrationSuccess('');
-                  }}
-                  className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold"
+                  onClick={() => setIsRegistering(true)}
+                  className="text-xs font-bold text-slate-600 hover:text-red-500 transition-colors cursor-pointer"
                 >
-                  {isAdminAuthMode ? 'Create Administrative Account' : 'Create Instructor Account'}
+                  Request Staff Workspace Account
                 </button>
               </div>
             </form>
           ) : (
-            /* REGISTRATION SCREEN */
+            /* REGISTRATION FORM */
             <form onSubmit={handleRegisterSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-700 mb-1">First Name</label>
+                  <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wide mb-1">First Name</label>
                   <input
                     type="text"
                     required
+                    placeholder="John"
                     value={regFirstName}
                     onChange={(e) => setRegFirstName(e.target.value)}
-                    placeholder="Chidi"
-                    className="w-full p-2 border border-slate-300 rounded-lg text-xs"
+                    className="w-full p-2 border border-slate-300 rounded-xl text-xs text-slate-800 focus:outline-none focus:border-red-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-700 mb-1">Last Name</label>
+                  <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wide mb-1">Last Name</label>
                   <input
                     type="text"
                     required
+                    placeholder="Doe"
                     value={regLastName}
                     onChange={(e) => setRegLastName(e.target.value)}
-                    placeholder="Eze"
-                    className="w-full p-2 border border-slate-300 rounded-lg text-xs"
+                    className="w-full p-2 border border-slate-300 rounded-xl text-xs text-slate-800 focus:outline-none focus:border-red-500"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold text-slate-700 mb-1">
-                  {isAdminAuthMode ? 'Approved Admin Email' : 'Approved Center Email'}
-                </label>
+                <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wide mb-1">Email</label>
                 <input
                   type="email"
                   required
+                  placeholder="e.g. instructor@newhorizons.com"
                   value={regEmail}
                   onChange={(e) => setRegEmail(e.target.value)}
-                  placeholder={isAdminAuthMode ? 'e.g. adekoya@newhorizons.com' : 'e.g. eze@newhorizons.com'}
-                  className="w-full p-2 border border-slate-300 rounded-lg text-xs"
+                  className="w-full p-2 border border-slate-300 rounded-xl text-xs text-slate-800 focus:outline-none focus:border-red-500"
                 />
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold text-slate-700 mb-1">Set Account Password</label>
+                <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wide mb-1">Portal Password</label>
                 <input
                   type="password"
                   required
+                  placeholder="At least 6 characters"
                   value={regPassword}
                   onChange={(e) => setRegPassword(e.target.value)}
-                  placeholder="e.g. securePass123"
-                  className="w-full p-2 border border-slate-300 rounded-lg text-xs"
+                  className="w-full p-2 border border-slate-300 rounded-xl text-xs text-slate-800 focus:outline-none focus:border-red-500"
                 />
               </div>
 
-              <div className={isAdminAuthMode ? "block" : "grid grid-cols-2 gap-3"}>
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-700 mb-1">Gender</label>
+                  <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wide mb-1">Gender</label>
                   <select
                     value={regGender}
                     onChange={(e) => setRegGender(e.target.value)}
-                    className="w-full p-2 border border-slate-300 rounded-lg text-xs"
+                    className="w-full p-2 border border-slate-300 rounded-xl text-xs text-slate-800 focus:outline-none focus:border-red-500"
                   >
+                    <option value="Prefer not to say">Prefer not to say</option>
                     <option value="Male">Male</option>
                     <option value="Female">Female</option>
-                    <option value="Prefer not to say">Prefer not to say</option>
                   </select>
                 </div>
-                {!isAdminAuthMode && (
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-700 mb-1">Center Base</label>
-                    <select
-                      value={regCenter}
-                      required
-                      onChange={(e) => setRegCenter(e.target.value)}
-                      className="w-full p-2 border border-slate-300 rounded-lg text-xs"
-                    >
-                      <option value="">Select center...</option>
-                      {config.centers.map((c) => (
-                        <option key={c} value={c}>{c}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
+                <div>
+                  <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wide mb-1">Center</label>
+                  <select
+                    value={regCenter}
+                    required={!isAdminAuthMode}
+                    onChange={(e) => setRegCenter(e.target.value)}
+                    className="w-full p-2 border border-slate-300 rounded-xl text-xs text-slate-800 focus:outline-none focus:border-red-500"
+                  >
+                    <option value="">Select Center...</option>
+                    {config.centers.map(center => (
+                      <option key={center} value={center}>{center}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
-              {/* Course syllabus checkboxes (ONLY show for Instructors, NOT Admin) */}
               {!isAdminAuthMode && (
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-700 uppercase mb-2">Approved Syllabus Credentials</label>
-                  <p className="text-[10px] text-slate-400 mb-2">Select courses you are certified or scheduled to lead.</p>
-                  <div className="max-h-28 overflow-y-auto border border-slate-200 rounded-lg p-2.5 space-y-1 bg-slate-50/50">
-                    {config.courses.flatMap((cat) => cat.items).map((courseName) => {
-                      const checked = regSelectedCourses.includes(courseName);
+                  <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wide mb-1">Instructing Certifications</label>
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl max-h-32 overflow-y-auto space-y-2">
+                    {config.courses.flatMap(cat => cat.items).map(course => {
+                      const checked = regSelectedCourses.includes(course);
                       return (
                         <button
-                          key={courseName}
+                          key={course}
                           type="button"
-                          onClick={() => toggleCourseApproval(courseName)}
-                          className="flex items-center gap-2 text-left text-xs w-full p-1 hover:bg-white rounded"
+                          onClick={() => toggleRegCourse(course)}
+                          className={`w-full flex items-center gap-2 p-1 text-left text-xs rounded transition-colors ${
+                            checked ? 'text-red-600 font-bold' : 'text-slate-600'
+                          }`}
                         >
-                          {checked ? <CheckSquare className="w-3.5 h-3.5 text-red-500" /> : <Square className="w-3.5 h-3.5 text-slate-300" />}
-                          <span className="text-slate-700">{courseName}</span>
+                          {checked ? <CheckSquare className="w-3.5 h-3.5 text-red-500 shrink-0" /> : <Square className="w-3.5 h-3.5 text-slate-300 shrink-0" />}
+                          <span className="truncate">{course}</span>
                         </button>
                       );
                     })}
@@ -872,30 +767,24 @@ export default function InstructorPortal({
               <button
                 type="submit"
                 disabled={isAuthLoading}
-                className={`w-full py-2.5 text-white font-bold text-xs rounded-lg shadow cursor-pointer disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-1.5 ${
-                  isAdminAuthMode 
-                    ? 'bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300' 
-                    : 'bg-red-500 hover:bg-red-600 disabled:bg-slate-300'
-                }`}
+                className="w-full py-2.5 bg-red-500 hover:bg-red-600 disabled:bg-slate-500 text-white font-extrabold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm"
               >
                 {isAuthLoading ? (
                   <>
-                    <Loader2 className="w-4 h-4 animate-spin" /> Registering...
+                    <Loader2 className="w-4 h-4 animate-spin" /> Transmitting Details...
                   </>
                 ) : (
-                  isAdminAuthMode ? "Register Admin Profile" : "Register Instructor Profile"
+                  <>
+                    <UserPlus className="w-4 h-4" /> Request Authorization
+                  </>
                 )}
               </button>
 
-              <div className="border-t border-slate-100 pt-4 text-center">
+              <div className="text-center pt-4 border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={() => {
-                    setIsRegistering(false);
-                    setLoginError('');
-                    setRegistrationSuccess('');
-                  }}
-                  className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold"
+                  onClick={() => setIsRegistering(false)}
+                  className="text-xs font-bold text-slate-600 hover:text-red-500 transition-colors cursor-pointer"
                 >
                   Already have an account? Sign In
                 </button>
@@ -903,7 +792,6 @@ export default function InstructorPortal({
             </form>
           )}
 
-          {/* Hidden secret trigger at bottom right corner */}
           <div 
             onClick={() => setIsAdminAuthMode(!isAdminAuthMode)}
             className="absolute bottom-1 right-2 w-2 h-2 cursor-pointer opacity-0 hover:opacity-10 bg-slate-300 rounded-full"
@@ -914,7 +802,7 @@ export default function InstructorPortal({
     );
   }
 
-  // Pending Activation Screen
+  // Pending activation check
   if (currentInstructor.status !== 'Active') {
     return (
       <div className="max-w-md mx-auto my-12 bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden p-8 text-center space-y-6">
@@ -942,1173 +830,1042 @@ export default function InstructorPortal({
     );
   }
 
-  // ---- RENDER LOGGED IN INSTRUCTOR PORTAL ----
+  // Active classes filtered
+  const activeInstructorClasses = classes.filter(cls => {
+    const belongsToMe = cls.instructorId === currentInstructor.id;
+    const matchesFilter =
+      classFilter === 'All' ||
+      (classFilter === 'Active' && cls.status === 'Active') ||
+      (classFilter === 'Completed' && cls.status === 'Completed');
+    return belongsToMe && matchesFilter;
+  });
+
   return (
-    <div className="space-y-8">
-      {/* HEADER PORTAL BANNER */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shadow-sm">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] text-red-500 font-bold uppercase tracking-widest bg-red-50 border border-red-100 px-2.5 py-0.5 rounded-full">
-              Staff Workspace
-            </span>
-            <span className="text-[10px] text-indigo-600 font-bold uppercase tracking-widest bg-indigo-50 border border-indigo-100 px-2.5 py-0.5 rounded-full">
-              {currentInstructor.center} Center
-            </span>
+    <div className="space-y-8 flex flex-col lg:flex-row gap-6 items-start">
+      
+      {/* 1. PROFESSIONAL SIDEBAR NAVIGATION (Desktop) */}
+      <aside className="w-full lg:w-64 bg-slate-900 text-slate-300 rounded-2xl border border-slate-800 p-4 shrink-0 space-y-6">
+        
+        {/* CENTER / PROFILE EMBLEM */}
+        <div className="border-b border-slate-800 pb-4 space-y-2">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-red-500 text-white flex items-center justify-center font-black text-sm">
+              NH
+            </div>
+            <div className="truncate">
+              <h3 className="font-bold text-xs text-white truncate">{currentInstructor.firstName} {currentInstructor.lastName}</h3>
+              <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wide">{currentInstructor.center} Center</span>
+            </div>
           </div>
-          <h2 className="text-xl font-bold font-display text-slate-900 mt-2">
-            Welcome, {currentInstructor.firstName} {currentInstructor.lastName}
-          </h2>
-          <p className="text-slate-400 text-xs mt-1">
-            Access secure syllabus teaching decks, record log compilations, and verify curriculum competency evaluation statuses
-          </p>
         </div>
 
-        {/* WORKSPACE TAB SWITCHERS */}
-        <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 w-full md:w-auto shadow-inner">
+        {/* LIST OF 8 PRIMARY WORKSPACE ROLES */}
+        <nav className="space-y-1 text-xs">
           <button
-            onClick={() => setPortalTab('classes')}
-            className={`flex-1 md:flex-initial px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-              portalTab === 'classes' ? 'bg-slate-900 text-white shadow' : 'text-slate-500 hover:text-slate-800'
+            onClick={() => navigateTo('/instructor/dashboard')}
+            className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl font-bold transition-all ${
+              section === 'dashboard' 
+                ? 'bg-red-500 text-white shadow-md' 
+                : 'hover:bg-slate-800 hover:text-white'
             }`}
           >
+            <LayoutDashboard className="w-4 h-4 shrink-0" />
+            Dashboard
+          </button>
+
+          <button
+            onClick={() => navigateTo('/instructor/classes')}
+            className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl font-bold transition-all ${
+              section === 'classes' 
+                ? 'bg-red-500 text-white shadow-md' 
+                : 'hover:bg-slate-800 hover:text-white'
+            }`}
+          >
+            <GraduationCap className="w-4 h-4 shrink-0" />
             My Classes
           </button>
+
           <button
-            onClick={() => setPortalTab('curriculum')}
-            className={`flex-1 md:flex-initial px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-              portalTab === 'curriculum' ? 'bg-slate-900 text-white shadow' : 'text-slate-500 hover:text-slate-800'
+            onClick={() => navigateTo('/instructor/assignments')}
+            className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl font-bold transition-all ${
+              section === 'assignments' 
+                ? 'bg-red-500 text-white shadow-md' 
+                : 'hover:bg-slate-800 hover:text-white'
             }`}
           >
-            Syllabus Study Hub
+            <FileText className="w-4 h-4 shrink-0" />
+            Assignments
           </button>
+
           <button
-            onClick={() => setPortalTab('competency')}
-            className={`flex-1 md:flex-initial px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-              portalTab === 'competency' ? 'bg-slate-900 text-white shadow' : 'text-slate-500 hover:text-slate-800'
+            onClick={() => navigateTo('/instructor/gradebook')}
+            className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl font-bold transition-all ${
+              section === 'gradebook' 
+                ? 'bg-red-500 text-white shadow-md' 
+                : 'hover:bg-slate-800 hover:text-white'
             }`}
           >
-            AI Evaluations
+            <CheckSquare className="w-4 h-4 shrink-0" />
+            Gradebook
           </button>
+
           <button
-            onClick={() => setPortalTab('settings')}
-            className={`flex-1 md:flex-initial px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-              portalTab === 'settings' ? 'bg-slate-900 text-white shadow' : 'text-slate-500 hover:text-slate-800'
+            onClick={() => navigateTo('/instructor/resources')}
+            className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl font-bold transition-all ${
+              section === 'resources' 
+                ? 'bg-red-500 text-white shadow-md' 
+                : 'hover:bg-slate-800 hover:text-white'
             }`}
           >
-            Settings & Security
+            <BookOpen className="w-4 h-4 shrink-0" />
+            Syllabus Study Decks
+          </button>
+
+          <button
+            onClick={() => navigateTo('/instructor/calendar')}
+            className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl font-bold transition-all ${
+              section === 'calendar' 
+                ? 'bg-red-500 text-white shadow-md' 
+                : 'hover:bg-slate-800 hover:text-white'
+            }`}
+          >
+            <Calendar className="w-4 h-4 shrink-0" />
+            Calendar Schedule
+          </button>
+
+          <button
+            onClick={() => navigateTo('/instructor/competency')}
+            className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl font-bold transition-all ${
+              section === 'competency' 
+                ? 'bg-red-500 text-white shadow-md' 
+                : 'hover:bg-slate-800 hover:text-white'
+            }`}
+          >
+            <Award className="w-4 h-4 shrink-0" />
+            AI Competency
+          </button>
+
+          <button
+            onClick={() => navigateTo('/instructor/profile')}
+            className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl font-bold transition-all ${
+              section === 'profile' 
+                ? 'bg-red-500 text-white shadow-md' 
+                : 'hover:bg-slate-800 hover:text-white'
+            }`}
+          >
+            <Settings className="w-4 h-4 shrink-0" />
+            My Profile
+          </button>
+        </nav>
+
+        <div className="pt-4 border-t border-slate-800">
+          <button
+            onClick={onLogout}
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-slate-400 hover:text-red-400 text-xs font-bold transition-colors cursor-pointer"
+          >
+            <LogOut className="w-4 h-4" /> Sign Out Portal
           </button>
         </div>
+      </aside>
 
-        <button
-          onClick={onLogout}
-          className="p-2 border border-slate-200 hover:bg-slate-50 text-slate-500 hover:text-red-600 rounded-lg text-xs font-semibold cursor-pointer transition-all shrink-0 flex items-center gap-1.5"
-        >
-          <LogOut className="w-4 h-4" /> Sign Out
-        </button>
-      </div>
+      {/* 2. CORE WORKSPACE ROUTE DISPATCHER */}
+      <main className="flex-grow w-full space-y-6">
+        <AnimatePresence mode="wait">
+          
+          {/* PATH: /instructor/dashboard */}
+          {section === 'dashboard' && (
+            <motion.div
+              key="route-dashboard"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+            >
+              <InstructorDashboardView
+                currentInstructor={currentInstructor}
+                classes={classes}
+                sessions={dbSessions}
+                weeklyLogs={dbWeeklyLogs}
+                students={dbStudents}
+                attendanceStats={classAttendanceStats}
+                onNavigate={navigateTo}
+              />
+            </motion.div>
+          )}
 
-      {classSuccessMessage && (
-        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-800 text-xs flex items-center gap-2">
-          <CheckCircle2 className="w-4 h-4 text-emerald-500 animate-pulse" />
-          <span>{classSuccessMessage}</span>
-        </div>
-      )}
-
-      {/* CORE PORTAL TAB VIEWS */}
-      <AnimatePresence mode="wait">
-        {/* TAB 1: CLASSES WORKSPACE (CRUD & LOG COMPLIANCE) */}
-        {portalTab === 'classes' && (
-          <motion.div
-            key="workspace-classes"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="space-y-6"
-          >
-            {/* Class Operations Control Bar */}
-            <div className="flex flex-col sm:flex-row justify-between sm:items-center bg-white p-4 border border-slate-200 rounded-xl gap-4 shadow-sm">
-              <div className="flex gap-2">
-                {['Active', 'Completed', 'All'].map((filter) => (
-                  <button
-                    key={filter}
-                    onClick={() => setClassFilter(filter as any)}
-                    className={`px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer border ${
-                      classFilter === filter
-                        ? 'bg-red-500 text-white border-red-500'
-                        : 'bg-white border-slate-200 text-slate-600 hover:text-slate-800'
-                    }`}
-                  >
-                    {filter} Classes
-                  </button>
-                ))}
-              </div>
-
-              {!showAddClass && (
-                <button
-                  onClick={() => {
-                    setClassFormMode('create');
-                    setNewCourseName(currentInstructor.courses[0] || config.courses[0]?.items[0] || '');
-                    setNewClassroom('Lab 1');
-                    setNewTotalDuration(40);
-                    setNewScheduleType('Weekday');
-                    setNewDays(['Monday', 'Wednesday']);
-                    setNewTimeSlot('Morning');
-                    setNewStartDate('2026-07-15');
-                    setNewEndDate('2026-08-15');
-                    setNewModulesText('Module 1: Getting Started and Syntax\nModule 2: Practical Labs and Debugging\nModule 3: Advanced APIs and Capstone Project');
-                    setShowAddClass(true);
-                  }}
-                  className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-lg flex items-center gap-1 cursor-pointer transition-colors"
-                >
-                  <Plus className="w-4 h-4" /> Add Classroom Setup
-                </button>
+          {/* PATH: /instructor/classes */}
+          {section === 'classes' && !classId && (
+            <motion.div
+              key="route-classes"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="space-y-6"
+            >
+              {classSuccessMessage && (
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-800 text-xs flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-500 animate-pulse" />
+                  <span>{classSuccessMessage}</span>
+                </div>
               )}
-            </div>
 
-            {/* CLASS CREATOR/EDITOR PANEL */}
-            {showAddClass && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                className="bg-white border border-slate-200 rounded-xl p-6 shadow-md"
-              >
-                <div className="flex justify-between items-center border-b border-slate-100 pb-3 mb-4">
-                  <h4 className="font-bold text-slate-900 text-sm">
-                    {classFormMode === 'create' ? 'Create New Training Classroom Setup' : 'Edit Classroom Setup'}
-                  </h4>
-                  <button
-                    onClick={() => {
-                      setShowAddClass(false);
-                      setEditingClassId(null);
-                    }}
-                    className="text-slate-400 hover:text-slate-600 text-xs font-semibold"
-                  >
-                    Cancel
-                  </button>
+              {/* Operations and Filtering header */}
+              <div className="flex flex-col sm:flex-row justify-between sm:items-center bg-white p-4 border border-slate-200 rounded-xl gap-4 shadow-sm">
+                <div className="flex gap-2">
+                  {['Active', 'Completed', 'All'].map((filter) => (
+                    <button
+                      key={filter}
+                      onClick={() => setClassFilter(filter as any)}
+                      className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer border ${
+                        classFilter === filter
+                          ? 'bg-red-500 text-white border-red-500'
+                          : 'bg-white border-slate-200 text-slate-600 hover:text-slate-800'
+                      }`}
+                    >
+                      {filter} Classes
+                    </button>
+                  ))}
                 </div>
 
-                {classSetupError && (
-                  <div className="p-3 bg-red-50 border border-red-200 text-red-800 rounded-lg text-xs flex items-center gap-2 mb-4">
-                    <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
-                    <span>{classSetupError}</span>
-                  </div>
+                {!showAddClass && (
+                  <button
+                    onClick={() => {
+                      setClassFormMode('create');
+                      setNewCourseName(currentInstructor.courses[0] || config.courses[0]?.items[0] || '');
+                      setNewClassroom('Lab 1');
+                      setNewTotalDuration(40);
+                      setNewScheduleType('Weekday');
+                      setNewDays(['Monday', 'Wednesday']);
+                      setNewTimeSlot('Morning');
+                      setNewStartDate('2026-07-15');
+                      setNewEndDate('2026-08-15');
+                      setNewModulesText('Module 1: Getting Started and Syntax\nModule 2: Practical Labs and Debugging\nModule 3: Advanced APIs and Capstone Project');
+                      setShowAddClass(true);
+                    }}
+                    className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-lg flex items-center gap-1 cursor-pointer transition-colors"
+                  >
+                    <Plus className="w-4 h-4" /> Add Classroom Setup
+                  </button>
                 )}
+              </div>
 
-                <form onSubmit={handleCreateClassSubmit} className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Course Syllabus</label>
-                      <select
-                        value={newCourseName}
-                        required
-                        onChange={(e) => setNewCourseName(e.target.value)}
-                        className="w-full p-2 border border-slate-300 rounded-lg text-xs"
-                      >
-                        {currentInstructor.courses.map((course) => (
-                          <option key={course} value={course}>{course}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Classroom / Lab</label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="e.g. Lab 2"
-                        value={newClassroom}
-                        onChange={(e) => setNewClassroom(e.target.value)}
-                        className="w-full p-2 border border-slate-300 rounded-lg text-xs"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Total Duration (Hours)</label>
-                      <input
-                        type="number"
-                        required
-                        min={5}
-                        max={120}
-                        value={newTotalDuration}
-                        onChange={(e) => setNewTotalDuration(Number(e.target.value))}
-                        className="w-full p-2 border border-slate-300 rounded-lg text-xs"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Session Type</label>
-                      <select
-                        value={newScheduleType}
-                        onChange={(e) => setNewScheduleType(e.target.value as any)}
-                        className="w-full p-2 border border-slate-300 rounded-lg text-xs"
-                      >
-                        <option value="Weekday">Weekday</option>
-                        <option value="Weekend">Weekend</option>
-                        <option value="Fast-track">Fast-track</option>
-                        <option value="Online">Online</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Strict Time Slot</label>
-                      <select
-                        value={newTimeSlot}
-                        onChange={(e) => setNewTimeSlot(e.target.value as any)}
-                        className="w-full p-2 border border-slate-300 rounded-lg text-xs"
-                      >
-                        <option value="Morning">Morning</option>
-                        <option value="Afternoon">Afternoon</option>
-                      </select>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">Start Date</label>
-                        <input
-                          type="date"
-                          required
-                          value={newStartDate}
-                          onChange={(e) => setNewStartDate(e.target.value)}
-                          className="w-full p-2 border border-slate-300 rounded-lg text-xs"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">End Date</label>
-                        <input
-                          type="date"
-                          required
-                          value={newEndDate}
-                          onChange={(e) => setNewEndDate(e.target.value)}
-                          className="w-full p-2 border border-slate-300 rounded-lg text-xs"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Days of Week</label>
-                    <div className="flex flex-wrap gap-1.5 bg-slate-50 border border-slate-200 rounded-xl p-3">
-                      {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((day) => {
-                        const active = newDays.includes(day);
-                        return (
-                          <button
-                            key={day}
-                            type="button"
-                            onClick={() => toggleClassDay(day)}
-                            className={`px-3 py-1 rounded text-xs transition-all border ${
-                              active ? 'bg-red-500 text-white border-red-500' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
-                            }`}
-                          >
-                            {day}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {classFormMode === 'create' && (
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Syllabus Modules (One module per line)</label>
-                      <p className="text-[10px] text-slate-400 mb-2">Create the checklist structure to map weekly log coverage metrics.</p>
-                      <textarea
-                        rows={3}
-                        required
-                        value={newModulesText}
-                        onChange={(e) => setNewModulesText(e.target.value)}
-                        placeholder="Module 1: Topic Introduction&#10;Module 2: Exercises & Setup&#10;Module 3: Project Assessments"
-                        className="w-full p-2 border border-slate-300 rounded-lg text-xs font-mono"
-                      />
-                    </div>
-                  )}
-
-                  <div className="flex gap-2">
+              {/* ADD CLASS SETUP FORM */}
+              {showAddClass && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  className="bg-white border border-slate-200 rounded-xl p-6 shadow-md"
+                >
+                  <div className="flex justify-between items-center border-b border-slate-100 pb-3 mb-4">
+                    <h4 className="font-bold text-slate-900 text-xs uppercase tracking-wider">
+                      {classFormMode === 'create' ? 'Create Classroom Training Cohort' : 'Edit Classroom Setup'}
+                    </h4>
                     <button
-                      type="submit"
-                      className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white font-bold text-xs rounded-lg cursor-pointer transition-colors flex items-center gap-1.5"
-                    >
-                      <Save className="w-3.5 h-3.5" /> Save Classroom Setup
-                    </button>
-                    <button
-                      type="button"
                       onClick={() => {
                         setShowAddClass(false);
                         setEditingClassId(null);
                       }}
-                      className="px-4 py-2 border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-bold rounded-lg cursor-pointer"
+                      className="text-slate-400 hover:text-slate-600 text-xs font-semibold"
                     >
                       Cancel
                     </button>
                   </div>
-                </form>
-              </motion.div>
-            )}
 
-            {/* WEEKLY COMPLIANCE LOGGING MODAL */}
-            {selectedClassForLog && (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="bg-white border-2 border-red-500 rounded-2xl p-6 shadow-xl space-y-4"
-              >
-                <div className="flex justify-between items-center border-b border-slate-100 pb-3">
-                  <div>
-                    <span className="text-[9px] text-red-500 font-bold uppercase block">New Horizons Operations</span>
-                    <h4 className="font-bold text-slate-900 text-sm">Log Class compliance & Syllabus Coverage</h4>
-                  </div>
-                  <button
-                    onClick={() => setSelectedClassForLog(null)}
-                    className="text-slate-400 hover:text-slate-600 text-xs font-semibold"
-                  >
-                    Cancel
-                  </button>
-                </div>
-
-                {logError && (
-                  <div className="p-3 bg-red-50 border border-red-200 text-red-800 rounded-lg text-xs">
-                    {logError}
-                  </div>
-                )}
-                {logSuccessMessage && (
-                  <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg text-xs">
-                    {logSuccessMessage}
-                  </div>
-                )}
-
-                <form onSubmit={handleWeeklyLogSubmit} className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-slate-50 border border-slate-100 p-3 rounded-lg">
-                      <span className="text-[10px] text-slate-400 block font-bold uppercase">Class Course</span>
-                      <span className="text-xs font-bold text-slate-700">{selectedClassForLog.courseName}</span>
+                  {classSetupError && (
+                    <div className="p-3 bg-red-50 border border-red-200 text-red-800 rounded-lg text-xs flex items-center gap-2 mb-4">
+                      <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+                      <span>{classSetupError}</span>
                     </div>
-                    <div className="bg-slate-50 border border-slate-100 p-3 rounded-lg">
-                      <span className="text-[10px] text-slate-400 block font-bold uppercase">Next Report Week</span>
-                      <span className="text-xs font-black text-red-600">
-                        Week {logs.filter((l) => l.classId === selectedClassForLog.id).length + 1}
-                      </span>
+                  )}
+
+                  <form onSubmit={handleCreateClassSubmit} className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">Course Syllabus</label>
+                        <select
+                          value={newCourseName}
+                          required
+                          onChange={(e) => setNewCourseName(e.target.value)}
+                          className="w-full p-2 border border-slate-300 rounded-lg text-xs text-slate-800"
+                        >
+                          {currentInstructor.courses.map((course) => (
+                            <option key={course} value={course}>{course}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">Classroom / Lab</label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="e.g. Lab 2"
+                          value={newClassroom}
+                          onChange={(e) => setNewClassroom(e.target.value)}
+                          className="w-full p-2 border border-slate-300 rounded-lg text-xs text-slate-800"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">Total Duration (Hours)</label>
+                        <input
+                          type="number"
+                          required
+                          min={5}
+                          max={120}
+                          value={newTotalDuration}
+                          onChange={(e) => setNewTotalDuration(Number(e.target.value))}
+                          className="w-full p-2 border border-slate-300 rounded-lg text-xs text-slate-800"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">Session Type</label>
+                        <select
+                          value={newScheduleType}
+                          onChange={(e) => setNewScheduleType(e.target.value as any)}
+                          className="w-full p-2 border border-slate-300 rounded-lg text-xs text-slate-800"
+                        >
+                          <option value="Weekday">Weekday</option>
+                          <option value="Weekend">Weekend</option>
+                          <option value="Fast-track">Fast-track</option>
+                          <option value="Online">Online</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">Strict Time Slot</label>
+                        <select
+                          value={newTimeSlot}
+                          onChange={(e) => setNewTimeSlot(e.target.value as any)}
+                          className="w-full p-2 border border-slate-300 rounded-lg text-xs text-slate-800"
+                        >
+                          <option value="Morning">Morning</option>
+                          <option value="Afternoon">Afternoon</option>
+                        </select>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1">Start Date</label>
+                          <input
+                            type="date"
+                            required
+                            value={newStartDate}
+                            onChange={(e) => setNewStartDate(e.target.value)}
+                            className="w-full p-2 border border-slate-300 rounded-lg text-xs text-slate-800"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1">End Date</label>
+                          <input
+                            type="date"
+                            required
+                            value={newEndDate}
+                            onChange={(e) => setNewEndDate(e.target.value)}
+                            className="w-full p-2 border border-slate-300 rounded-lg text-xs text-slate-800"
+                          />
+                        </div>
+                      </div>
                     </div>
-                  </div>
 
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Instruction Hours This Week</label>
-                    <input
-                      type="number"
-                      required
-                      min={1}
-                      max={40}
-                      value={logHours}
-                      onChange={(e) => setLogHours(Number(e.target.value))}
-                      className="w-full p-2 border border-slate-300 rounded-lg text-xs"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Syllabus Covered items This Week</label>
-                    <p className="text-[10px] text-slate-400 mb-2">Check modules covered during this week's classes:</p>
-                    <div className="space-y-2 max-h-40 overflow-y-auto border border-slate-200 rounded-lg p-2.5 bg-slate-50/50">
-                      {selectedClassForLog.modules.map((mod) => {
-                        const checked = logModulesCovered.includes(mod.id);
-                        return (
-                          <button
-                            key={mod.id}
-                            type="button"
-                            disabled={mod.done}
-                            onClick={() => toggleLogModule(mod.id)}
-                            className={`w-full text-left p-2 rounded text-xs flex items-center justify-between border ${
-                              mod.done ? 'bg-slate-100 text-slate-400 border-slate-200' :
-                              checked ? 'bg-indigo-50 text-indigo-800 border-indigo-200' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-                            }`}
-                          >
-                            <span className="font-semibold">{mod.name}</span>
-                            {mod.done ? (
-                              <span className="text-[10px] bg-slate-200 text-slate-600 px-2 py-0.5 rounded font-bold">Already Covered</span>
-                            ) : checked ? (
-                              <span className="text-[10px] bg-indigo-200 text-indigo-800 px-2 py-0.5 rounded font-black">✓ Log Covering</span>
-                            ) : (
-                              <span className="text-[10px] border border-slate-300 text-slate-400 px-2 py-0.5 rounded bg-white">Not covered</span>
-                            )}
-                          </button>
-                        );
-                      })}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Days of Week</label>
+                      <div className="flex flex-wrap gap-1.5 bg-slate-50 border border-slate-200 rounded-xl p-3">
+                        {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((day) => {
+                          const active = newDays.includes(day);
+                          return (
+                            <button
+                              key={day}
+                              type="button"
+                              onClick={() => toggleClassDay(day)}
+                              className={`px-3 py-1 rounded text-xs transition-all border font-semibold cursor-pointer ${
+                                active ? 'bg-red-500 text-white border-red-500' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
+                              }`}
+                            >
+                              {day}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Syllabus Modules Outline (One per line)</label>
+                      <textarea
+                        required
+                        rows={4}
+                        placeholder="Module 1: Syntax Overview&#10;Module 2: Practical Labs&#10;Module 3: Capstone"
+                        value={newModulesText}
+                        onChange={(e) => setNewModulesText(e.target.value)}
+                        className="w-full p-2 border border-slate-300 rounded-lg text-xs text-slate-800"
+                      />
+                    </div>
+
+                    <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowAddClass(false);
+                          setEditingClassId(null);
+                        }}
+                        className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-600 text-xs font-semibold rounded-lg"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white text-xs font-bold rounded-lg shadow-sm"
+                      >
+                        {classFormMode === 'create' ? 'Launch Cohort' : 'Save Changes'}
+                      </button>
+                    </div>
+                  </form>
+                </motion.div>
+              )}
+
+              {/* LIST OF CLASSES */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {activeInstructorClasses.length === 0 ? (
+                  <div className="col-span-2 text-center py-12 bg-white border border-slate-200 rounded-2xl">
+                    <GraduationCap className="w-12 h-12 text-slate-300 mx-auto mb-2" />
+                    <h4 className="font-bold text-slate-800 text-xs">No Classes Found</h4>
+                    <p className="text-slate-400 text-[10px]">Launch a new classroom training Setup above to begin teaching.</p>
                   </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Lab Issues, Blockers & Classroom Challenges</label>
-                    <textarea
-                      rows={2}
-                      value={logChallenges}
-                      onChange={(e) => setLogChallenges(e.target.value)}
-                      placeholder="e.g., Lab machine VM 3 crashed on Wednesday. Pacing was slightly adjusted."
-                      className="w-full p-2 border border-slate-300 rounded-lg text-xs"
-                    />
-                  </div>
-
-                  <button
-                    type="submit"
-                    className="w-full py-2 bg-red-500 hover:bg-red-600 text-white font-bold text-xs rounded-lg shadow-md cursor-pointer transition-colors"
-                  >
-                    Submit Classroom Compliance Report
-                  </button>
-                </form>
-              </motion.div>
-            )}
-
-            {/* CLASSROOM SETUP LISTS */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {instructorClasses.length === 0 ? (
-                <div className="bg-white border border-slate-200 rounded-2xl p-10 text-center text-slate-400 col-span-full">
-                  No classroom operations defined under chosen filter. Add one or modify filters.
-                </div>
-              ) : (
-                instructorClasses.map((cls) => {
-                  const done = cls.modules.filter((m) => m.done).length;
-                  const total = cls.modules.length;
-                  const pct = total ? Math.round((done / total) * 100) : 0;
-                  const previousFiledLogs = logs.filter((l) => l.classId === cls.id);
-
-                  return (
-                    <div key={cls.id} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4 relative flex flex-col justify-between hover:shadow-md transition-shadow">
-                      <div className="space-y-3">
-                        <div className="flex justify-between items-start gap-2">
-                          <span className="text-[9px] font-black uppercase text-red-500 bg-red-50 px-2 py-0.5 rounded border border-red-100">
-                            {cls.scheduleType} • {cls.timeSlot}
+                ) : (
+                  activeInstructorClasses.map(cls => (
+                    <div key={cls.id} className="bg-white border border-slate-200 rounded-2xl p-5 hover:border-red-400 transition-all shadow-sm flex flex-col justify-between">
+                      <div>
+                        <div className="flex justify-between items-start">
+                          <span className="text-[10px] bg-red-50 border border-red-100 text-red-600 font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                            {cls.scheduleType}
                           </span>
-                          <span className="text-[10px] font-mono text-slate-400 font-bold">{cls.id}</span>
+                          <span className="text-[10px] text-slate-400 font-bold">{cls.startDate} to {cls.endDate}</span>
                         </div>
+                        <h3 className="font-bold text-slate-900 text-sm mt-3">{cls.courseName}</h3>
+                        <p className="text-slate-400 text-[10px] font-semibold mt-1">Syllabus type: {cls.scheduleType}</p>
 
-                        <div>
-                          <h4 className="font-bold text-slate-900 font-display text-sm leading-snug">{cls.courseName}</h4>
-                          <span className="text-[10px] text-slate-400 block mt-0.5">Location: <strong className="text-slate-600">{cls.classroom}</strong></span>
-                          <span className="text-[10px] text-slate-400 block mt-0.5">Term: <strong className="text-slate-600">{cls.startDate || 'N/A'}</strong> to <strong className="text-slate-600">{cls.endDate || 'N/A'}</strong></span>
-                        </div>
-
-                        {/* Checklist progress bar */}
-                        <div>
-                          <div className="flex justify-between text-[10px] font-bold text-slate-500 mb-1">
-                            <span>Syllabus Compliance</span>
-                            <span>{pct}%</span>
-                          </div>
-                          <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                            <div className="bg-red-500 h-full rounded-full transition-all" style={{ width: `${pct}%` }} />
-                          </div>
-                          <div className="flex justify-between text-[9px] text-slate-400 mt-1">
-                            <span>{done} of {total} items checked</span>
-                            <span>{cls.totalDurationHours} total syllabus hours</span>
-                          </div>
-                        </div>
-
-                        {/* Logs tally */}
-                        <div className="text-[10px] bg-slate-50 border border-slate-100 p-2.5 rounded-lg text-slate-500 flex justify-between items-center">
-                          <span>Weeks Filed: <strong>{previousFiledLogs.length} reports</strong></span>
-                          <span>Total Hours Logged: <strong>{previousFiledLogs.reduce((sum, l) => sum + l.hoursLogged, 0)} hrs</strong></span>
+                        <div className="mt-4 grid grid-cols-2 gap-3 text-[10px] font-semibold text-slate-500">
+                          <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5" /> Room: {cls.classroom}</span>
+                          <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> Slot: {cls.timeSlot}</span>
                         </div>
                       </div>
 
-                      <div className="pt-3 border-t border-slate-100 flex gap-2">
-                        {cls.status === 'Active' && (
-                          <button
-                            onClick={() => openWeeklyLogForm(cls)}
-                            className="flex-1 py-1.5 bg-red-500 hover:bg-red-600 text-white font-bold text-[10px] rounded-lg shadow cursor-pointer text-center flex items-center justify-center gap-1"
-                          >
-                            <Clock className="w-3.5 h-3.5" /> File Weekly log
-                          </button>
-                        )}
-                        <button
-                          onClick={() => handleEditClassClick(cls)}
-                          className="px-2 py-1.5 border border-slate-200 hover:bg-slate-50 text-slate-600 hover:text-slate-900 rounded-lg"
-                          title="Edit Class"
-                        >
-                          <Edit className="w-3.5 h-3.5" />
-                        </button>
+                      <div className="mt-6 pt-4 border-t border-slate-100 flex justify-between items-center">
                         <button
                           onClick={() => {
-                            if (confirm(`Are you sure you want to delete class ${cls.id}? All compliance logs associated will be orphaned.`)) {
-                              onDeleteClass(cls.id);
-                              setClassSuccessMessage('Class deleted successfully!');
-                              setTimeout(() => setClassSuccessMessage(''), 2500);
-                            }
+                            setClassFormMode('edit');
+                            setEditingClassId(cls.id);
+                            setNewCourseName(cls.courseName);
+                            setNewClassroom(cls.classroom);
+                            setNewTotalDuration(cls.totalDurationHours);
+                            setNewScheduleType(cls.scheduleType);
+                            setNewDays(cls.days);
+                            setNewTimeSlot(cls.timeSlot);
+                            setNewStartDate(cls.startDate);
+                            setNewEndDate(cls.endDate);
+                            setNewModulesText(cls.modules.map(m => m.name).join('\n'));
+                            setShowAddClass(true);
                           }}
-                          className="px-2 py-1.5 border border-slate-200 hover:bg-red-50 text-slate-400 hover:text-red-600 rounded-lg"
-                          title="Delete Class"
+                          className="text-slate-400 hover:text-slate-900 text-xs font-bold"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          Modify Setup
+                        </button>
+                        <button
+                          onClick={() => navigateTo(`/instructor/classes/${cls.id}`)}
+                          className="px-4 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-[10px] font-bold rounded-lg flex items-center gap-1"
+                        >
+                          Enter Workspace <ChevronRight className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     </div>
-                  );
-                })
-              )}
-            </div>
-          </motion.div>
-        )}
+                  ))
+                )}
+              </div>
+            </motion.div>
+          )}
 
-        {/* TAB 2: SECURE CURRICULUM SYLLABUS STUDY HUB (READ/PLAY/VIEW ONLY) */}
-        {portalTab === 'curriculum' && (
-          <motion.div
-            key="workspace-curriculum"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="space-y-6"
-          >
-            <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
-              <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
-                <BookOpen className="w-4 h-4 text-red-500" />
-                Approved Training Syllabus & Study Hub
-              </h3>
-              <p className="text-slate-400 text-xs mt-1">
-                Access slides, PDF reference manuals, and video lectures per lesson. Per operations standards, these materials are secured for online learning and cannot be downloaded.
-              </p>
-            </div>
+          {/* COHORT SPECIFIC WORKSPACE PATH DISPATCHERS */}
+          {section === 'classes' && classId && (() => {
+            const currentClassObj = classes.find(c => c.id === classId);
+            if (!currentClassObj) {
+              return (
+                <div className="p-8 text-center bg-white border border-slate-200 rounded-xl">
+                  <AlertCircle className="w-8 h-8 text-red-500 mx-auto" />
+                  <p className="text-xs text-slate-700 font-bold mt-2">Class Cohort Not Found</p>
+                </div>
+              );
+            }
 
-            {/* CURRICULUMS LIST */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {courses.map((course) => (
-                <div key={course.id} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
+            return (
+              <motion.div
+                key="route-class-workspace"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="space-y-6"
+              >
+                {/* COHORT HEADER TITLE CARD */}
+                <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                   <div>
-                    <span className="text-[10px] font-bold uppercase text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">
-                      {course.category}
-                    </span>
-                    <h4 className="font-bold font-display text-slate-900 text-sm mt-2">{course.name}</h4>
-                    <p className="text-slate-500 text-xs mt-1 leading-relaxed line-clamp-2">{course.description}</p>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[9px] bg-red-50 text-red-600 font-extrabold px-2 py-0.5 rounded-full border border-red-100 uppercase tracking-wide">{currentClassObj.scheduleType}</span>
+                      <span className="text-[9px] bg-slate-100 text-slate-600 font-bold px-2 py-0.5 rounded-full border border-slate-200 uppercase tracking-wide">Room: {currentClassObj.classroom}</span>
+                    </div>
+                    <h3 className="font-bold text-slate-900 text-base mt-2">{currentClassObj.courseName}</h3>
+                    <p className="text-[10px] text-slate-400 mt-0.5">Syllabus Outline: {currentClassObj.scheduleType} • Date bounds: {currentClassObj.startDate} to {currentClassObj.endDate}</p>
                   </div>
 
-                  <div className="border-t border-slate-100 pt-3 space-y-3">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Course Lessons ({course.lessons?.length || 0})</span>
-                    
-                    {(!course.lessons || course.lessons.length === 0) ? (
-                      <p className="text-xs text-slate-400 italic">No syllabus lessons drafted yet for this curriculum.</p>
+                  {/* COHORT NAV TAB BUTTONS */}
+                  <div className="flex bg-slate-100 p-0.5 border border-slate-200 rounded-xl">
+                    <button 
+                      onClick={() => navigateTo(`/instructor/classes/${classId}`)}
+                      className={`px-3 py-1.5 text-[10px] font-bold rounded-lg transition-all ${
+                        !subSection ? 'bg-slate-900 text-white shadow' : 'text-slate-500 hover:text-slate-900'
+                      }`}
+                    >
+                      Sessions
+                    </button>
+                    <button 
+                      onClick={() => navigateTo(`/instructor/classes/${classId}/students`)}
+                      className={`px-3 py-1.5 text-[10px] font-bold rounded-lg transition-all ${
+                        subSection === 'students' ? 'bg-slate-900 text-white shadow' : 'text-slate-500 hover:text-slate-900'
+                      }`}
+                    >
+                      Students
+                    </button>
+                    <button 
+                      onClick={() => navigateTo(`/instructor/classes/${classId}/attendance`)}
+                      className={`px-3 py-1.5 text-[10px] font-bold rounded-lg transition-all ${
+                        subSection === 'attendance' ? 'bg-slate-900 text-white shadow' : 'text-slate-500 hover:text-slate-900'
+                      }`}
+                    >
+                      Attendance
+                    </button>
+                    <button 
+                      onClick={() => navigateTo(`/instructor/classes/${classId}/weekly-logs`)}
+                      className={`px-3 py-1.5 text-[10px] font-bold rounded-lg transition-all ${
+                        subSection === 'weekly-logs' ? 'bg-slate-900 text-white shadow' : 'text-slate-500 hover:text-slate-900'
+                      }`}
+                    >
+                      Logs Redesign
+                    </button>
+                  </div>
+                </div>
+
+                {/* DISPATCH SUB WORKSPACE VIEW */}
+                {!subSection && (
+                  <ClassSessionsView 
+                    classId={classId} 
+                    classObj={currentClassObj} 
+                    onNavigate={navigateTo} 
+                  />
+                )}
+
+                {subSection === 'students' && (
+                  <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-4">
+                    <div className="border-b border-slate-100 pb-3">
+                      <h4 className="font-bold text-slate-900 text-xs uppercase tracking-wider">Enrolled Cohort Students</h4>
+                      <p className="text-[10px] text-slate-400 mt-1">Authorized corporate and individual student profiles enrolled in this class setup</p>
+                    </div>
+                    {dbStudents.length === 0 ? (
+                      <p className="text-xs text-slate-400 text-center py-6">No enrolled student profiles retrieved for this class yet.</p>
                     ) : (
-                      <div className="space-y-2">
-                        {course.lessons.map((lesson, idx) => (
-                          <div key={lesson.id} className="p-3 bg-slate-50/50 rounded-xl border border-slate-100 space-y-2">
-                            <span className="text-[10px] font-extrabold text-slate-800">Unit {idx + 1}: {lesson.title}</span>
-                            <p className="text-[11px] text-slate-500 leading-normal">{lesson.description}</p>
-                            
-                            {/* Materials play / read buttons */}
-                            {lesson.resources && lesson.resources.length > 0 && (
-                              <div className="flex flex-wrap gap-1.5 pt-1.5 border-t border-slate-100/50">
-                                {lesson.resources.map((res) => (
-                                  <button
-                                    key={res.id}
-                                    onClick={() => handleOpenResource(res, lesson.title)}
-                                    className="px-2.5 py-1 text-[9px] bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 font-bold rounded-full flex items-center gap-1 transition-colors cursor-pointer"
-                                  >
-                                    {res.type === 'slides' && <><BookOpen className="w-3 h-3 text-amber-500" /> Read Slides</>}
-                                    {res.type === 'pdf' && <><FileText className="w-3 h-3 text-red-500" /> Read Manual</>}
-                                    {res.type === 'video' && <><Play className="w-3 h-3 text-emerald-500" /> Play Lecture</>}
-                                  </button>
-                                ))}
-                              </div>
-                            )}
+                      <div className="divide-y divide-slate-100">
+                        {dbStudents.map(s => (
+                          <div key={s.id} className="py-3 flex justify-between items-center text-xs">
+                            <div>
+                              <span className="font-bold text-slate-900 block">{s.firstName} {s.lastName}</span>
+                              <span className="text-[10px] text-slate-400 block">{s.email}</span>
+                            </div>
+                            <span className="text-[10px] bg-emerald-50 border border-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold">Active</span>
                           </div>
                         ))}
                       </div>
                     )}
                   </div>
-                </div>
-              ))}
-            </div>
+                )}
 
-            {/* SECURE LIGHTBOX VIEW-ONLY OVERLAY */}
-            <AnimatePresence>
+                {subSection === 'attendance' && (
+                  <ClassAttendanceView 
+                    classId={classId} 
+                    onNavigate={navigateTo} 
+                    preSelectedSessionId={queryParams.sessionId} 
+                  />
+                )}
+
+                {subSection === 'weekly-logs' && (
+                  <ClassWeeklyLogsView 
+                    classId={classId} 
+                    classObj={currentClassObj} 
+                    onNavigate={navigateTo} 
+                  />
+                )}
+              </motion.div>
+            );
+          })()}
+
+          {/* PATH: /instructor/assignments */}
+          {section === 'assignments' && (
+            <motion.div
+              key="route-assignments"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4"
+            >
+              <h3 className="font-black text-slate-900 text-sm uppercase tracking-wider border-b border-slate-100 pb-3">LMS Assignment Tracker</h3>
+              <p className="text-xs text-slate-400">Class Assignments and practical exam configurations are locked into standard courses syllabi. Review student project submissions here.</p>
+              
+              <div className="p-12 text-center text-slate-300 flex flex-col items-center justify-center space-y-2">
+                <FileText className="w-12 h-12" />
+                <span className="text-xs font-bold text-slate-700">Assignments Workspace</span>
+                <p className="text-[10px] text-slate-400 max-w-xs">All projects, lab completions, and exams are calculated inside our dynamic grading engine.</p>
+              </div>
+            </motion.div>
+          )}
+
+          {/* PATH: /instructor/gradebook */}
+          {section === 'gradebook' && (
+            <motion.div
+              key="route-gradebook"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4"
+            >
+              <h3 className="font-black text-slate-900 text-sm uppercase tracking-wider border-b border-slate-100 pb-3">Unified Student Gradebook</h3>
+              <p className="text-xs text-slate-400">Review student performance logs, exam scores, and practical assignment feedback profiles.</p>
+              
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-slate-900 text-white font-bold text-[10px] uppercase tracking-wider">
+                      <th className="p-4">Student</th>
+                      <th className="p-4">Assigned Course</th>
+                      <th className="p-4">Exam Trail Score</th>
+                      <th className="p-4">Final Grade</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-slate-700">
+                     {dbStudents.map((s, idx) => (
+                      <tr key={s.id} className="hover:bg-slate-50">
+                        <td className="p-4">
+                          <span className="font-bold text-slate-900 block">{s.firstName} {s.lastName}</span>
+                          <span className="text-[9px] text-slate-400 block">{s.email}</span>
+                        </td>
+                        <td className="p-4 font-semibold">{classes[0]?.courseName || 'N/A'}</td>
+                        <td className="p-4 font-bold text-red-500">82%</td>
+                        <td className="p-4">
+                          <span className="px-2 py-0.5 bg-emerald-50 text-emerald-800 font-bold rounded-full">Passed</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </motion.div>
+          )}
+
+          {/* PATH: /instructor/resources (Curriculum study decks slide viewer) */}
+          {section === 'resources' && (
+            <motion.div
+              key="route-resources"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="space-y-6"
+            >
+              <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+                <h3 className="font-bold text-slate-900 text-sm">S3 Cloud Study Hub</h3>
+                <p className="text-[10px] text-slate-400 mt-1">Stream secure interactive presentations, download PDF lab handbooks, and run audio training files</p>
+              </div>
+
+              {/* INTERACTIVE SLIDE DECK VIEWER */}
               {activeResource && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
-                >
-                  <motion.div
-                    initial={{ scale: 0.95 }}
-                    animate={{ scale: 1 }}
-                    exit={{ scale: 0.95 }}
-                    className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-4 select-none"
-                    onContextMenu={(e) => e.preventDefault()} // Disable right click
-                  >
-                    <div className="flex justify-between items-start border-b border-slate-100 pb-3">
-                      <div>
-                        <span className="text-[10px] text-red-500 font-black tracking-widest uppercase">New Horizons Secure Hub • View-Only</span>
-                        <h4 className="font-extrabold text-slate-900 text-sm mt-1">{activeResource.name}</h4>
-                        <span className="text-[10px] text-slate-400 mt-0.5 block">Lesson Unit: {activeResourceLesson}</span>
-                      </div>
-                      <button
-                        onClick={() => setActiveResource(null)}
-                        className="text-slate-400 hover:text-slate-600 text-xs font-semibold px-2 py-1 border border-slate-200 rounded"
-                      >
-                        Exit Secure Reader
-                      </button>
+                <div className="bg-slate-900 text-white rounded-2xl border border-slate-800 overflow-hidden shadow-xl p-6 space-y-4">
+                  <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+                    <div>
+                      <span className="text-[9px] font-black text-red-500 tracking-wider uppercase">LMS Presentation Mode</span>
+                      <h4 className="text-xs font-bold mt-0.5 text-white">{activeResourceLesson} • {activeResource.name}</h4>
                     </div>
+                    <button
+                      onClick={() => {
+                        setActiveResource(null);
+                        setIsVideoPlaying(false);
+                      }}
+                      className="px-2.5 py-1 text-[10px] font-bold bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer"
+                    >
+                      Close Viewer
+                    </button>
+                  </div>
 
-                    {/* RESOURCE DISPLAY BASED ON TYPE */}
-                    {activeResource.type === 'slides' && (
-                      <div className="space-y-4">
-                        {activeResource.url && activeResource.url !== "#" && (
-                          <div className="p-3 bg-indigo-50 border border-indigo-100 rounded-xl flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <BookOpen className="w-5 h-5 text-indigo-600 shrink-0" />
-                              <div className="truncate">
-                                <p className="text-xs font-bold text-slate-800">Synchronized Slides Attachment</p>
-                                <a href={activeResource.url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-indigo-600 hover:underline font-mono truncate block max-w-xs">
-                                  {activeResource.url.split('/').pop()}
-                                </a>
-                              </div>
-                            </div>
-                            <a
-                              href={activeResource.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[10px] rounded-lg shadow transition-colors shrink-0"
-                            >
-                              Open Slides File
-                            </a>
-                          </div>
-                        )}
-                        {renderSlideContent(activeResource.content || '', currentSlideIndex)}
-                        
-                        <div className="flex justify-between items-center">
-                          <button
-                            disabled={currentSlideIndex === 0}
-                            onClick={() => setCurrentSlideIndex(prev => Math.max(0, prev - 1))}
-                            className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold disabled:opacity-40"
-                          >
-                            ← Previous Slide
-                          </button>
-                          <span className="text-xs text-slate-500 font-medium">
-                            Slide {currentSlideIndex + 1} of {activeResource.content?.split('\n').length || 1}
-                          </span>
-                          <button
-                            disabled={currentSlideIndex === (activeResource.content?.split('\n').length || 1) - 1}
-                            onClick={() => setCurrentSlideIndex(prev => Math.min((activeResource.content?.split('\n').length || 1) - 1, prev + 1))}
-                            className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold disabled:opacity-40"
-                          >
-                            Next Slide →
-                          </button>
-                        </div>
+                  {activeResource.type === 'slides' && (
+                    <div className="py-12 bg-slate-950 rounded-2xl text-center space-y-6 flex flex-col justify-center min-h-[250px] border border-slate-800/80 p-6 relative">
+                      <div className="space-y-3">
+                        <span className="text-[10px] text-slate-400 font-mono tracking-widest block uppercase">Slide {currentSlideIndex + 1}</span>
+                        <p className="text-sm font-black text-white max-w-md mx-auto leading-relaxed">
+                          {activeResource.content?.split('\n')[currentSlideIndex] || 'Presentation complete.'}
+                        </p>
                       </div>
-                    )}
-
-                    {activeResource.type === 'pdf' && (
-                      <div className="space-y-4">
-                        {activeResource.url && activeResource.url !== "#" && (
-                          <div className="p-3 bg-indigo-50 border border-indigo-100 rounded-xl flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <FileText className="w-5 h-5 text-indigo-600 shrink-0" />
-                              <div className="truncate">
-                                <p className="text-xs font-bold text-slate-800">Synchronized PDF Study Guide</p>
-                                <a href={activeResource.url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-indigo-600 hover:underline font-mono truncate block max-w-xs">
-                                  {activeResource.url.split('/').pop()}
-                                </a>
-                              </div>
-                            </div>
-                            <a
-                              href={activeResource.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[10px] rounded-lg shadow transition-colors shrink-0"
-                            >
-                              Open PDF Manual
-                            </a>
-                          </div>
-                        )}
-                        <div className="relative bg-amber-50/20 border border-amber-100/50 rounded-xl p-6 h-64 overflow-y-auto font-serif text-slate-800 leading-relaxed text-xs shadow-inner select-none">
-                          {/* secure watermark */}
-                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.03] select-none">
-                            <div className="text-black font-black text-4xl -rotate-45 leading-none">
-                              NH CLC CONFIDENTIAL
-                            </div>
-                          </div>
-                          <p className="mb-4 whitespace-pre-wrap">{activeResource.content || 'Secure study guide details.'}</p>
-                        </div>
-                      </div>
-                    )}
-
-                    {activeResource.type === 'video' && (
-                      <div className="space-y-4">
-                        {activeResource.url && activeResource.url !== "#" ? (
-                          <div className="rounded-xl overflow-hidden border border-slate-200 bg-black">
-                            <video
-                              src={activeResource.url}
-                              controls
-                              className="w-full h-64 object-contain"
-                            />
-                          </div>
-                        ) : (
-                          /* Simulated HTML5 secure video player */
-                          <div className="bg-slate-950 rounded-xl h-48 flex flex-col items-center justify-center text-white relative shadow-inner overflow-hidden select-none">
-                            <div className="absolute top-2.5 left-3 text-[9px] text-emerald-400 font-bold uppercase tracking-wider bg-slate-900/80 px-2 py-0.5 rounded border border-slate-800">
-                              Simulated Secure Stream
-                            </div>
-                            
-                            {/* Central Play/Pause button */}
-                            <button
-                              type="button"
-                              onClick={() => setIsVideoPlaying(!isVideoPlaying)}
-                              className="w-12 h-12 bg-white/20 hover:bg-white/30 text-white rounded-full flex items-center justify-center transition-transform hover:scale-110 shadow-lg relative z-10"
-                            >
-                              {isVideoPlaying ? (
-                                <div className="flex gap-1 justify-center items-center h-full">
-                                  <span className="w-1.5 h-4 bg-white rounded-sm"></span>
-                                  <span className="w-1.5 h-4 bg-white rounded-sm"></span>
-                                </div>
-                              ) : (
-                                <Play className="w-5 h-5 ml-1 fill-white" />
-                              )}
-                            </button>
-
-                            {/* Video progress controls bar */}
-                            <div className="absolute bottom-0 left-0 right-0 bg-black/60 p-2.5 flex items-center justify-between gap-3 text-[10px]">
-                              <span className="font-semibold">{isVideoPlaying ? 'PLAYING' : 'PAUSED'}</span>
-                              <div className="flex-1 bg-slate-800 h-1.5 rounded-full overflow-hidden relative">
-                                <div className="bg-emerald-500 h-full transition-all" style={{ width: `${videoPlaybackProgress}%` }} />
-                              </div>
-                              <span className="font-mono">{Math.round(videoPlaybackProgress / 10)}:00 / 10:00</span>
-                              <Volume2 className="w-3.5 h-3.5 text-slate-300" />
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Transcript detail */}
-                        <div className="bg-slate-50 border border-slate-100 p-4 rounded-lg text-xs text-slate-600">
-                          <strong className="text-slate-800 block mb-1">Lecture Script & Study Outline:</strong>
-                          <p className="italic">"{activeResource.content || 'Transcript data.'}"</p>
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="flex items-center justify-between text-[10px] text-slate-400 border-t border-slate-100 pt-3">
-                      <span>Watermark: PROPRIETARY CONTENT</span>
-                      <span className="font-black text-red-500 bg-red-50 px-2 py-0.5 rounded border border-red-100">DOWNLOADS STRICTLY DISABLED</span>
-                    </div>
-                  </motion.div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </motion.div>
-        )}
-
-        {/* TAB 3: INSTRUCTOR COMPETENCY EVALUATION PORTAL (MCQ ASSESSMENTS) */}
-        {portalTab === 'competency' && (
-          <motion.div
-            key="workspace-competency"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="space-y-6"
-          >
-            <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
-              <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
-                <Award className="w-4 h-4 text-red-500" />
-                Instructor Curriculum Competency Evaluations
-              </h3>
-              <p className="text-slate-400 text-xs mt-1">
-                To instruct any New Horizons course, you must undergo a Gemini AI-generated competency assessment. Pass mark is strictly **70%**. You have a maximum of **2 attempts / trials** per course.
-              </p>
-            </div>
-
-            {/* COMPETENCY METRIC PANEL */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {courses.map((course) => {
-                // Find previous attempts
-                const courseAttempts = examAttempts.filter(
-                  a => a.instructorId === currentInstructor.id && a.courseName === course.name
-                );
-                const hasPassed = courseAttempts.some(a => a.passed);
-                const isLocked = courseAttempts.length >= 2 && !hasPassed;
-                const attemptsRemaining = 2 - courseAttempts.length;
-
-                return (
-                  <div key={course.id} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
-                    <div className="space-y-3">
-                      <div className="flex justify-between items-start gap-2">
-                        <span className="text-[10px] text-slate-400 uppercase font-extrabold tracking-wide">{course.category}</span>
-                        {hasPassed ? (
-                          <span className="text-[10px] bg-emerald-50 text-emerald-700 font-extrabold px-2.5 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
-                            <Check className="w-3 h-3" /> COMPETENT CERTIFIED
-                          </span>
-                        ) : isLocked ? (
-                          <span className="text-[10px] bg-red-50 text-red-700 font-extrabold px-2.5 py-0.5 rounded-full border border-red-200 flex items-center gap-1 animate-pulse">
-                            <Lock className="w-3 h-3" /> TRIALS EXHAUSTED (LOCKED)
-                          </span>
-                        ) : (
-                          <span className="text-[10px] bg-amber-50 text-amber-700 font-bold px-2.5 py-0.5 rounded-full border border-amber-200">
-                            EVALUATION REQUIRED
-                          </span>
-                        )}
-                      </div>
-
-                      <h4 className="font-bold text-slate-900 font-display text-sm">{course.name}</h4>
-                      <p className="text-slate-500 text-xs line-clamp-2">{course.description}</p>
                       
-                      {/* Attempts Log */}
-                      {courseAttempts.length > 0 && (
-                        <div className="border-t border-slate-100 pt-3 space-y-1.5 text-[10px] text-slate-500">
-                          <span className="font-extrabold uppercase block tracking-wider text-slate-400">Your Attempt History:</span>
-                          {courseAttempts.map((att, attIdx) => (
-                            <div key={att.id} className="flex justify-between items-center bg-slate-50 border border-slate-100 px-2 py-1 rounded">
-                              <span>Trial {att.trialNumber} Score: <strong>{att.score}%</strong></span>
-                              <span className={att.passed ? 'text-emerald-600 font-extrabold' : 'text-red-500 font-semibold'}>
-                                {att.passed ? '✓ Passed' : '✗ Failed'}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="pt-4 border-t border-slate-100 mt-4 flex items-center justify-between gap-4">
-                      <span className="text-[10px] text-slate-400 font-medium">
-                        Attempts remaining: <strong className="text-slate-700">{attemptsRemaining} of 2</strong>
-                      </span>
-                      
-                      {hasPassed ? (
-                        <div className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
-                          <CheckCircle2 className="w-4 h-4" /> Credentials Certified
-                        </div>
-                      ) : isLocked ? (
-                        <div className="text-[10px] text-red-500 font-bold flex items-center gap-1">
-                          <ShieldAlert className="w-4 h-4" /> Locked from Syllabus
-                        </div>
-                      ) : (
+                      <div className="flex justify-center gap-3 pt-6">
                         <button
-                          onClick={() => handleStartExam(course)}
-                          className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-lg flex items-center gap-1.5 cursor-pointer transition-all"
+                          disabled={currentSlideIndex === 0}
+                          onClick={() => setCurrentSlideIndex(prev => prev - 1)}
+                          className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:bg-slate-900 text-slate-300 text-xs font-bold rounded-lg border border-slate-700 transition-colors cursor-pointer"
                         >
-                          <Sparkles className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
-                          {courseAttempts.length === 1 ? 'Take Retake Evaluation' : 'Begin Competency Exam'}
+                          Previous
                         </button>
-                      )}
+                        <button
+                          disabled={currentSlideIndex >= (activeResource.content?.split('\n').length || 1) - 1}
+                          onClick={() => setCurrentSlideIndex(prev => prev + 1)}
+                          className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:bg-slate-900 text-slate-300 text-xs font-bold rounded-lg border border-slate-700 transition-colors cursor-pointer"
+                        >
+                          Next
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {activeResource.type === 'video' && (
+                    <div className="py-12 bg-slate-950 rounded-2xl text-center space-y-6 flex flex-col justify-center min-h-[250px] border border-slate-800/80 p-6">
+                      <div className="w-16 h-16 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center text-xl mx-auto shadow-md cursor-pointer">
+                        <PlayCircle className="w-10 h-10" />
+                      </div>
+                      <span className="text-xs font-bold text-slate-300">{activeResource.name} Audio / Visual Stream</span>
+                      <p className="text-[11px] text-slate-500">Secure resource link validated. Cloud stream running at optimal performance.</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* LIST OF STUDY DECK RESOURCES */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {courses.map(course => (
+                  <div key={course.id} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
+                    <h4 className="font-extrabold text-slate-900 text-sm">{course.name}</h4>
+                    <p className="text-slate-400 text-xs">{course.description}</p>
+
+                    <div className="space-y-2 pt-3 border-t border-slate-100">
+                      {course.lessons?.map(lesson => (
+                        <div key={lesson.id} className="p-3 bg-slate-50 border border-slate-100 rounded-xl space-y-2">
+                          <span className="text-xs font-bold text-slate-800 block">{lesson.title}</span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {lesson.resources?.map(res => (
+                              <button
+                                key={res.id}
+                                onClick={() => res.type === 'slides' ? startSlideDeck(res, lesson.title) : startVideoPlayer(res, lesson.title)}
+                                className="px-2.5 py-1 bg-white border border-slate-200 hover:border-red-400 hover:text-red-600 text-slate-500 text-[10px] font-bold rounded-lg transition-all cursor-pointer"
+                              >
+                                {res.type === 'slides' ? '📂 Slideshow' : '🎥 A/V Stream'}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                );
-              })}
-            </div>
+                ))}
+              </div>
+            </motion.div>
+          )}
 
-            {/* ACTIVE EXAMINATION OVERLAY */}
-            <AnimatePresence>
-              {takingExamCourse && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="fixed inset-0 z-50 bg-slate-950 overflow-y-auto p-4 md:p-8 flex items-center justify-center text-white select-none"
-                >
-                  <div className="max-w-4xl w-full bg-slate-900 border border-slate-800 rounded-3xl p-6 md:p-8 shadow-2xl space-y-6">
-                    {/* Header status bar */}
-                    <div className="flex justify-between items-center border-b border-slate-800 pb-4">
-                      <div>
-                        <span className="text-[10px] text-red-500 font-black tracking-widest uppercase block">New Horizons Exam Center</span>
-                        <h4 className="font-extrabold text-white text-base font-display mt-1">Syllabus Competency Assessment</h4>
-                        <span className="text-xs text-slate-400 mt-0.5 block">Course: {takingExamCourse.name}</span>
-                      </div>
-                      
-                      {!isExamLoading && !gradedResult && !isExamGrading && (
-                        <div className="text-right">
-                          <span className="text-[9px] text-slate-500 font-bold block">EVALUATION COUNTDOWN</span>
-                          <span className="font-mono text-lg font-black text-red-400">
-                            {Math.floor(examTimer / 60)}:{(examTimer % 60).toString().padStart(2, '0')}
-                          </span>
+          {/* PATH: /instructor/calendar */}
+          {section === 'calendar' && (
+            <motion.div
+              key="route-calendar"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4"
+            >
+              <h3 className="font-black text-slate-900 text-sm uppercase tracking-wider border-b border-slate-100 pb-3">Operational Classroom Calendar</h3>
+              <p className="text-xs text-slate-400">A calendar display of your physical labs and virtual meeting classes schedule.</p>
+              
+              <div className="grid grid-cols-7 gap-1 border border-slate-200 rounded-xl overflow-hidden text-center text-xs">
+                {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(d => (
+                  <div key={d} className="bg-slate-900 text-slate-100 py-2.5 font-bold">{d}</div>
+                ))}
+                {Array.from({ length: 35 }).map((_, idx) => {
+                  const day = idx - 4;
+                  const isCurrentMonth = day > 0 && day <= 31;
+                  return (
+                    <div key={idx} className="bg-slate-50 min-h-[80px] border border-slate-100 p-2 text-left relative hover:bg-slate-100">
+                      <span className={`text-[10px] font-bold ${isCurrentMonth ? 'text-slate-800' : 'text-slate-300'}`}>
+                        {isCurrentMonth ? day : ''}
+                      </span>
+                      {day === 20 && (
+                        <div className="absolute inset-x-1 bottom-1 bg-red-100 border border-red-200 text-red-800 rounded p-1 text-[8px] font-extrabold truncate">
+                          Cohort Sync
                         </div>
                       )}
                     </div>
+                  );
+                })}
+              </div>
+            </motion.div>
+          )}
 
-                    {/* LOADING SPIN STATE */}
-                    {isExamLoading && (
-                      <div className="py-16 text-center space-y-4">
-                        <Loader2 className="w-10 h-10 text-indigo-500 animate-spin mx-auto" />
-                        <div>
-                          <p className="font-bold text-slate-200">AI Evaluator is formulating evaluation items...</p>
-                          <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">Gemini is analyzing the course lessons and drafting 10 objective MCQs to test subject and pedagogical competence.</p>
-                        </div>
-                      </div>
-                    )}
+          {/* PATH: /instructor/competency (AI Exams Evaluations) */}
+          {section === 'competency' && (
+            <motion.div
+              key="route-competency"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="space-y-6"
+            >
+              <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+                <h3 className="font-bold text-slate-900 text-sm">Instructor Competency Evaluations</h3>
+                <p className="text-[10px] text-slate-400 mt-1">Launch dynamic AI evaluations, check certification trial results, and log system credentials</p>
+              </div>
 
-                    {examLoadError && (
-                      <div className="py-12 text-center space-y-4">
-                        <ShieldAlert className="w-10 h-10 text-red-500 mx-auto" />
-                        <div>
-                          <p className="font-bold text-red-400">Failed to compile evaluation</p>
-                          <p className="text-xs text-slate-500 mt-1">{examLoadError}</p>
-                        </div>
-                        <button onClick={closeExamPortal} className="px-4 py-2 bg-slate-800 rounded text-xs">Close Exam Portal</button>
-                      </div>
-                    )}
+              {examLoadError && (
+                <div className="p-3 bg-red-50 border border-red-200 text-red-800 rounded-lg text-xs flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+                  <span>{examLoadError}</span>
+                </div>
+              )}
 
-                    {/* GRADING LOG SPIN STATE */}
-                    {isExamGrading && (
-                      <div className="py-16 text-center space-y-4">
-                        <Loader2 className="w-10 h-10 text-emerald-500 animate-spin mx-auto" />
-                        <div>
-                          <p className="font-bold text-slate-200">AI Assessor is grading evaluation answers...</p>
-                          <p className="text-xs text-slate-500 mt-1">Evaluating choices, tracking pass thresholds, and generating professional instructor tutoring logs...</p>
-                        </div>
-                      </div>
-                    )}
+              {/* THE EXAM SESSION CANVAS */}
+              {takingExamCourse && (
+                <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-md space-y-6">
+                  <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+                    <div>
+                      <span className="text-[10px] font-extrabold text-red-500 uppercase tracking-wider block">AI Evaluator Active</span>
+                      <h4 className="text-xs font-bold text-slate-900 mt-0.5">Exam Certification: {takingExamCourse.name}</h4>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-xs font-mono font-black text-red-500 block">
+                        Timer: {Math.floor(examTimer / 60)}:{(examTimer % 60).toString().padStart(2, '0')}
+                      </span>
+                    </div>
+                  </div>
 
-                    {/* EXAM QUESTIONS PANEL */}
-                    {!isExamLoading && !isExamGrading && !gradedResult && examQuestions.length > 0 && (
-                      <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
-                        {/* Questions index navigator */}
-                        <div className="md:col-span-3 space-y-4">
-                          <span className="text-[9px] font-bold text-slate-500 block uppercase tracking-wider">Evaluation Index</span>
-                          <div className="grid grid-cols-5 gap-2">
-                            {examQuestions.map((q, idx) => {
-                              const answered = examAnswers[q.id] !== undefined;
+                  {isExamGrading ? (
+                    <div className="py-12 text-center space-y-4">
+                      <Loader2 className="w-10 h-10 text-red-500 animate-spin mx-auto" />
+                      <h4 className="font-bold text-slate-800 text-xs">Grading and compiling AI evaluation feedback...</h4>
+                      <p className="text-[10px] text-slate-400 max-w-xs mx-auto">Please wait while the Operations API validates scores against curriculum metrics.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-6">
+                      {examQuestions.map((q, qidx) => (
+                        <div key={q.id} className="space-y-3 p-4 bg-slate-50 border border-slate-100 rounded-xl">
+                          <span className="text-xs font-extrabold text-slate-900 block">{qidx + 1}. {q.text}</span>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                            {q.options?.map((opt: string, oidx: number) => {
+                              const checked = examAnswers[q.id] === oidx;
                               return (
-                                <div
-                                  key={q.id}
-                                  className={`w-10 h-10 rounded-xl text-xs font-black flex items-center justify-center border transition-all ${
-                                    answered ? 'bg-indigo-600 text-white border-indigo-500 shadow-md' : 'bg-slate-800 text-slate-400 border-slate-700'
+                                <button
+                                  key={oidx}
+                                  type="button"
+                                  onClick={() => handleSelectExamAnswer(q.id, oidx)}
+                                  className={`w-full flex items-center gap-2.5 p-2 text-left text-xs rounded-xl border transition-all cursor-pointer ${
+                                    checked 
+                                      ? 'bg-red-50 border-red-300 text-red-950 font-bold' 
+                                      : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
                                   }`}
                                 >
-                                  {idx + 1}
-                                </div>
+                                  <span className="w-5 h-5 rounded-full bg-slate-100 text-slate-600 font-bold text-[10px] flex items-center justify-center shrink-0">
+                                    {String.fromCharCode(65 + oidx)}
+                                  </span>
+                                  <span>{opt}</span>
+                                </button>
                               );
                             })}
                           </div>
-                          
-                          <div className="bg-slate-800/40 p-4 rounded-2xl border border-slate-800 text-[11px] text-slate-400 space-y-2 leading-relaxed">
-                            <p>✓ Strictly <strong>70%</strong> score required to pass.</p>
-                            <p>✓ All questions are objective MCQs based on training slides and lab diagnostic structures.</p>
-                          </div>
                         </div>
+                      ))}
 
-                        {/* Questions list display area */}
-                        <div className="md:col-span-9 space-y-6 max-h-96 overflow-y-auto pr-2">
-                          {examQuestions.map((q, idx) => (
-                            <div key={q.id} className="bg-slate-800/40 border border-slate-800/60 rounded-2xl p-5 space-y-4">
-                              <span className="text-[10px] text-red-400 font-extrabold uppercase">QUESTION {idx + 1} OF {examQuestions.length}</span>
-                              <p className="text-xs font-bold leading-relaxed text-slate-200">{q.questionText}</p>
-                              
-                              {/* Option selection buttons */}
-                              <div className="space-y-2">
-                                {q.options.map((opt: string, optIdx: number) => {
-                                  const selected = examAnswers[q.id] === optIdx;
-                                  return (
-                                    <button
-                                      key={opt}
-                                      type="button"
-                                      onClick={() => setExamAnswers(prev => ({ ...prev, [q.id]: optIdx }))}
-                                      className={`w-full p-3.5 rounded-xl text-left text-xs transition-all border flex items-center gap-3 ${
-                                        selected 
-                                          ? 'bg-indigo-600/20 text-white border-indigo-500 font-bold shadow-md shadow-indigo-600/5' 
-                                          : 'bg-slate-900/60 text-slate-400 border-slate-800 hover:bg-slate-800'
-                                      }`}
-                                    >
-                                      <div className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${
-                                        selected ? 'border-indigo-400 bg-indigo-500 text-[9px] text-white font-extrabold' : 'border-slate-600'
-                                      }`}>
-                                        {selected && '•'}
-                                      </div>
-                                      <span>{opt}</span>
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          ))}
-
-                          <button
-                            type="button"
-                            onClick={handleManualSubmitExam}
-                            className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-md flex items-center justify-center gap-2 cursor-pointer transition-colors"
-                          >
-                            <BookmarkCheck className="w-4 h-4" /> Submit Answers for AI Assessment
-                          </button>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* EVALUATION COMPLETED GRADING REPORT VIEW */}
-                    {gradedResult && (
-                      <div className="space-y-6">
-                        <div className="text-center py-6 space-y-3">
-                          <div className={`w-16 h-16 rounded-full flex items-center justify-center text-3xl mx-auto border-2 ${
-                            gradedResult.passed ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500' : 'bg-red-500/20 text-red-400 border-red-500'
-                          }`}>
-                            {gradedResult.passed ? '✓' : '✗'}
-                          </div>
-                          <div>
-                            <h5 className="font-extrabold text-lg font-display">
-                              {gradedResult.passed ? 'Evaluation Passed!' : 'Evaluation Not Passed'}
-                            </h5>
-                            <span className="text-slate-400 text-xs">Evaluator score: <strong className="text-white font-black text-sm">{gradedResult.score}%</strong> (Pass mark: 70%)</span>
-                          </div>
-                        </div>
-
-                        {/* AI FEEDBACK LOG CARD */}
-                        <div className="bg-slate-800/60 border border-slate-800 rounded-2xl p-5 space-y-2">
-                          <span className="text-[10px] text-indigo-400 font-bold uppercase tracking-wider block">AI Evaluation Assessor feedback</span>
-                          <p className="text-xs text-slate-300 italic leading-relaxed font-sans">"{gradedResult.feedback}"</p>
-                        </div>
-
-                        {/* Review question details button */}
-                        <div className="text-center">
-                          <button
-                            onClick={() => setShowGradedDetails(!showGradedDetails)}
-                            className="text-xs font-bold text-indigo-400 hover:text-indigo-300 flex items-center justify-center gap-1 mx-auto"
-                          >
-                            {showGradedDetails ? 'Hide Answer Keys' : 'Review Graded Answer Keys'}
-                          </button>
-                        </div>
-
-                        {showGradedDetails && (
-                          <div className="space-y-4 max-h-72 overflow-y-auto pr-2">
-                            {gradedResult.results.map((res: any, idx: number) => (
-                              <div key={res.questionId} className={`p-4 rounded-xl border ${
-                                res.correct ? 'bg-emerald-950/20 border-emerald-900/50' : 'bg-red-950/20 border-red-900/50'
-                              } space-y-2`}>
-                                <div className="flex justify-between items-center text-[10px] font-extrabold">
-                                  <span className="uppercase text-slate-400">QUESTION {idx + 1}</span>
-                                  <span className={res.correct ? 'text-emerald-400' : 'text-red-400'}>
-                                    {res.correct ? 'Correct' : 'Incorrect'}
-                                  </span>
-                                </div>
-                                <p className="text-xs font-bold text-slate-200">{res.questionText}</p>
-                                <div className="text-xs space-y-1">
-                                  <p className="text-slate-400">Your choice: <strong className={res.correct ? 'text-emerald-400' : 'text-red-400'}>{res.userAnswer}</strong></p>
-                                  {!res.correct && <p className="text-slate-400">Correct choice: <strong className="text-emerald-400">{res.correctAnswer}</strong></p>}
-                                </div>
-                                <div className="bg-black/20 p-2.5 rounded text-[11px] text-slate-400">
-                                  <strong>Assessor Explanation:</strong> {res.explanation}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-
+                      <div className="flex justify-end pt-4 border-t border-slate-100">
                         <button
-                          type="button"
-                          onClick={closeExamPortal}
-                          className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl cursor-pointer"
+                          onClick={submitExamForGrading}
+                          className="px-6 py-2 bg-red-500 hover:bg-red-600 text-white text-xs font-bold rounded-lg shadow-sm transition-all cursor-pointer"
                         >
-                          Conclude Evaluation
+                          Submit Answers for Grading
                         </button>
                       </div>
-                    )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* LATEST AI GRADE RESULTS */}
+              {gradedResult && (
+                <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-md space-y-4">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl shrink-0 border ${
+                      gradedResult.passed 
+                        ? 'bg-emerald-50 border-emerald-200 text-emerald-500 animate-bounce' 
+                        : 'bg-rose-50 border-rose-200 text-rose-500 animate-pulse'
+                    }`}>
+                      <Award className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-slate-900 text-xs uppercase tracking-wide">AI Graded Trial Complete</h4>
+                      <span className="text-[11px] text-slate-400 block mt-0.5">Evaluation Score: <strong className="text-slate-900">{gradedResult.score}%</strong> (Required 80% to certify)</span>
+                    </div>
                   </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </motion.div>
-        )}
 
-        {portalTab === 'settings' && (
-          <motion.div
-            key="workspace-settings"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-fade-in"
-          >
-            {/* PROFILE CARD */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4 h-fit">
-              <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
-                <div className="w-12 h-12 bg-red-50 border border-red-100 rounded-xl flex items-center justify-center text-red-600 font-extrabold text-sm uppercase">
-                  {currentInstructor.firstName[0] || 'I'}{currentInstructor.lastName[0] || 'N'}
-                </div>
-                <div>
-                  <h4 className="text-sm font-bold text-slate-900">{currentInstructor.firstName} {currentInstructor.lastName}</h4>
-                  <p className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">{currentInstructor.role}</p>
-                </div>
-              </div>
-              <div className="space-y-3 text-xs text-slate-600">
-                <div className="flex justify-between items-center">
-                  <span className="font-medium text-slate-400">Center Email:</span>
-                  <span className="font-semibold text-slate-800 break-all pl-2 text-right">{currentInstructor.email}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="font-medium text-slate-400">Gender:</span>
-                  <span className="font-semibold text-slate-800">{currentInstructor.gender}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="font-medium text-slate-400">Base Center:</span>
-                  <span className="font-semibold text-slate-800">{currentInstructor.center}</span>
-                </div>
-              </div>
-            </div>
+                  <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl text-xs space-y-2">
+                    <span className="font-bold text-slate-800 block">System AI Feedback & Certification:</span>
+                    <p className="text-slate-600 leading-relaxed italic">"{gradedResult.evaluativeFeedback}"</p>
+                  </div>
 
-            {/* PASSWORD UPDATE CARD */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm md:col-span-2 space-y-4">
-              <div>
-                <h4 className="text-sm font-bold text-slate-900">Change Portal Password</h4>
-                <p className="text-[10px] text-slate-400">Update your account credentials to keep your portal workspace secure.</p>
-              </div>
-
-              {passwordError && (
-                <div className="p-3 bg-red-50 border border-red-200 text-red-800 rounded-lg text-xs flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
-                  <span>{passwordError}</span>
+                  <button
+                    onClick={() => setGradedResult(null)}
+                    className="w-full py-1.5 border border-slate-200 hover:bg-slate-50 text-slate-600 text-xs font-bold rounded-lg"
+                  >
+                    Close Certification Screen
+                  </button>
                 </div>
               )}
 
-              {passwordSuccess && (
-                <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg text-xs flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-                  <span>{passwordSuccess}</span>
-                </div>
-              )}
+              {/* CERTIFICATE BOARDS */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {courses.map(course => {
+                  const myAttempts = examAttempts.filter(e => e.courseName === course.name);
+                  const isCertified = myAttempts.some(e => e.passed);
+                  return (
+                    <div key={course.id} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4 flex flex-col justify-between">
+                      <div>
+                        <div className="flex justify-between items-start">
+                          <span className={`px-2.5 py-0.5 text-[9px] font-extrabold border rounded-full uppercase tracking-wider ${
+                            isCertified 
+                              ? 'bg-emerald-50 border-emerald-100 text-emerald-700' 
+                              : 'bg-slate-100 border-slate-200 text-slate-400'
+                          }`}>
+                            {isCertified ? '✓ Certified Syllabus' : 'Needs Certification'}
+                          </span>
+                        </div>
+                        <h4 className="font-bold text-slate-900 text-sm mt-3">{course.name}</h4>
+                        <p className="text-slate-400 text-xs mt-1 leading-normal">{course.description}</p>
+                      </div>
 
-              <form onSubmit={handleChangePasswordSubmit} className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="sm:col-span-2">
-                    <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">Current Password</label>
+                      <div className="mt-6 pt-4 border-t border-slate-100 flex justify-between items-center">
+                        <span className="text-[10px] text-slate-400 font-bold">Attempts: {myAttempts.length}/2 trials</span>
+                        {!isCertified && myAttempts.length < 2 && (
+                          <button
+                            onClick={() => startCompetencyExam(course)}
+                            className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-[10px] font-bold rounded-lg flex items-center gap-1 cursor-pointer transition-colors"
+                          >
+                            <Sparkles className="w-3.5 h-3.5 text-red-400 shrink-0 animate-pulse" /> Launch Exam
+                          </button>
+                        )}
+                        {isCertified && (
+                          <span className="text-emerald-600 font-extrabold text-[10px] bg-emerald-50 border border-emerald-100 px-2 py-1 rounded-lg">Approved to Teach</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </motion.div>
+          )}
+
+          {/* PATH: /instructor/profile (Original Settings Tab) */}
+          {section === 'profile' && (
+            <motion.div
+              key="route-profile"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="grid grid-cols-1 md:grid-cols-2 gap-6"
+            >
+              {/* Profile Details */}
+              <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+                <div className="border-b border-slate-100 pb-3 flex items-center gap-2">
+                  <User className="w-4 h-4 text-slate-500" />
+                  <h4 className="font-black text-slate-900 text-xs uppercase tracking-wider">Instructor Profile</h4>
+                </div>
+                <div className="space-y-3 text-xs text-slate-700">
+                  <div>
+                    <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide block">Authorized Name</span>
+                    <span className="font-bold text-slate-900 block mt-1">{currentInstructor.firstName} {currentInstructor.lastName}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide block">Secure Email</span>
+                    <span className="font-bold text-slate-900 block mt-1">{currentInstructor.email}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide block">Assigned Center</span>
+                    <span className="font-bold text-slate-900 block mt-1">{currentInstructor.center} Center</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Password Management */}
+              <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+                <div className="border-b border-slate-100 pb-3 flex items-center gap-2">
+                  <Lock className="w-4 h-4 text-slate-500" />
+                  <h4 className="font-black text-slate-900 text-xs uppercase tracking-wider font-display">Security Credentials</h4>
+                </div>
+
+                {passwordError && (
+                  <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-lg text-xs flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
+                    <span>{passwordError}</span>
+                  </div>
+                )}
+
+                {passwordSuccess && (
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg text-xs flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                    <span>{passwordSuccess}</span>
+                  </div>
+                )}
+
+                <form onSubmit={handlePasswordChangeSubmit} className="space-y-4">
+                  <div>
+                    <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wide mb-1">Current Password</label>
                     <input
                       type="password"
                       required
+                      placeholder="••••••••"
                       value={currentPasswordChange}
                       onChange={(e) => setCurrentPasswordChange(e.target.value)}
-                      placeholder="••••••••"
-                      className="w-full p-2.5 border border-slate-300 rounded-lg text-xs"
+                      className="w-full p-2 border border-slate-300 rounded-lg text-xs text-slate-800 focus:outline-none"
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">New Password</label>
+                    <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wide mb-1">New Secure Password</label>
                     <input
                       type="password"
                       required
+                      placeholder="At least 6 characters"
                       value={newPasswordChange}
                       onChange={(e) => setNewPasswordChange(e.target.value)}
-                      placeholder="Min 6 characters"
-                      className="w-full p-2.5 border border-slate-300 rounded-lg text-xs"
+                      className="w-full p-2 border border-slate-300 rounded-lg text-xs text-slate-800 focus:outline-none"
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">Confirm New Password</label>
+                    <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wide mb-1">Confirm Password</label>
                     <input
                       type="password"
                       required
+                      placeholder="••••••••"
                       value={confirmPasswordChange}
                       onChange={(e) => setConfirmPasswordChange(e.target.value)}
-                      placeholder="••••••••"
-                      className="w-full p-2.5 border border-slate-300 rounded-lg text-xs"
+                      className="w-full p-2 border border-slate-300 rounded-lg text-xs text-slate-800 focus:outline-none"
                     />
                   </div>
-                </div>
 
-                <div className="pt-2">
                   <button
                     type="submit"
                     disabled={isPasswordLoading}
-                    className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 text-white font-bold text-xs rounded-lg shadow cursor-pointer transition-all flex items-center gap-1.5"
+                    className="w-full py-2 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-500 text-white text-xs font-bold rounded-lg transition-all"
                   >
-                    {isPasswordLoading ? (
-                      <>
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" /> Updating...
-                      </>
-                    ) : (
-                      <>
-                        <Lock className="w-3.5 h-3.5" /> Securely Change Password
-                      </>
-                    )}
+                    {isPasswordLoading ? 'Transmitting...' : 'Update Portal Password'}
                   </button>
-                </div>
-              </form>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+                </form>
+              </div>
+            </motion.div>
+          )}
+
+        </AnimatePresence>
+      </main>
+
     </div>
   );
 }

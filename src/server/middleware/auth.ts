@@ -202,8 +202,12 @@ export const requireClassInstructor = (classIdParam: string = "id") => {
       throw new NotFoundError("Class not found.");
     }
 
-    const cls = classes[0];
-    if (cls.instructor_id !== req.user.id) {
+    // Check if assigned in class_instructors table
+    const assignment = await query(
+      "SELECT 1 FROM class_instructors WHERE class_id = $1 AND instructor_id = $2",
+      [classId, req.user.id]
+    );
+    if (assignment.length === 0) {
       throw new ForbiddenError("Access denied. You are not the assigned instructor for this class.");
     }
 
@@ -255,7 +259,11 @@ export const requireClassStudent = (classIdParam: string = "id") => {
     const cls = classes[0];
 
     if (role === "INSTRUCTOR") {
-      if (cls.instructor_id !== req.user.id) {
+      const assignment = await query(
+        "SELECT 1 FROM class_instructors WHERE class_id = $1 AND instructor_id = $2",
+        [classId, req.user.id]
+      );
+      if (assignment.length === 0) {
         throw new ForbiddenError("Access denied. You are not the assigned instructor for this class.");
       }
       return next();
