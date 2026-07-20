@@ -141,6 +141,77 @@ const MIGRATIONS: Migration[] = [
         taken_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
       );`
     ]
+  },
+  {
+    id: "009_create_unified_users_and_sessions",
+    queries: [
+      `CREATE EXTENSION IF NOT EXISTS pgcrypto;`,
+      `DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'user_role') THEN
+          CREATE TYPE user_role AS ENUM ('SUPER_ADMIN', 'ADMIN', 'INSTRUCTOR', 'STUDENT');
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'user_status') THEN
+          CREATE TYPE user_status AS ENUM ('PENDING', 'ACTIVE', 'SUSPENDED', 'REJECTED');
+        END IF;
+      END$$;`,
+      `CREATE TABLE IF NOT EXISTS users (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        first_name VARCHAR(100) NOT NULL,
+        last_name VARCHAR(100) NOT NULL,
+        email VARCHAR(255) NOT NULL,
+        password_hash TEXT NOT NULL,
+        role user_role NOT NULL,
+        status user_status NOT NULL DEFAULT 'PENDING',
+        email_verified_at TIMESTAMPTZ,
+        last_login_at TIMESTAMPTZ,
+        password_changed_at TIMESTAMPTZ,
+        failed_login_attempts INTEGER NOT NULL DEFAULT 0,
+        locked_until TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        deleted_at TIMESTAMPTZ,
+        gender TEXT,
+        center TEXT,
+        courses JSONB NOT NULL DEFAULT '[]'::jsonb,
+        is_password_migrated BOOLEAN NOT NULL DEFAULT FALSE
+      );`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique ON users (LOWER(email)) WHERE deleted_at IS NULL;`,
+      `CREATE TABLE IF NOT EXISTS "session" (
+        "sid" varchar NOT NULL COLLATE "default",
+        "sess" json NOT NULL,
+        "expire" timestamp(6) NOT NULL,
+        CONSTRAINT "session_pkey" PRIMARY KEY ("sid")
+      ) WITH (OIDS=FALSE);`,
+      `CREATE INDEX IF NOT EXISTS "IDX_session_expire" ON "session" ("expire");`,
+      `INSERT INTO users (id, first_name, last_name, email, password_hash, role, status, gender, center, courses, is_password_migrated, created_at, updated_at)
+       SELECT 
+         gen_random_uuid(), 
+         first_name, 
+         last_name, 
+         email, 
+         password,
+         CASE 
+           WHEN LOWER(role) = 'admin' THEN 'ADMIN'::user_role
+           WHEN LOWER(role) = 'super_admin' THEN 'SUPER_ADMIN'::user_role
+           ELSE 'INSTRUCTOR'::user_role
+         END,
+         CASE 
+           WHEN LOWER(status) = 'active' THEN 'ACTIVE'::user_status
+           WHEN LOWER(status) = 'deactivated' THEN 'SUSPENDED'::user_status
+           ELSE 'ACTIVE'::user_status
+         END,
+         gender,
+         center,
+         courses,
+         FALSE,
+         created_at,
+         NOW()
+       FROM instructors
+       WHERE NOT EXISTS (
+         SELECT 1 FROM users WHERE LOWER(users.email) = LOWER(instructors.email)
+       );`
+    ]
   }
 ];
 

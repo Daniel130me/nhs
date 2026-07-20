@@ -7,8 +7,16 @@ import './index.css';
 // --- API Standard Response Compatibility Layer ---
 const originalFetch = window.fetch;
 Object.defineProperty(window, 'fetch', {
-  value: async function (...args: Parameters<typeof originalFetch>) {
-    const response = await originalFetch(...args);
+  value: async function (input: RequestInfo | URL, init?: RequestInit) {
+    const newInit: RequestInit = { ...init };
+    const urlString = typeof input === 'string' ? input : (input instanceof URL ? input.toString() : (input as Request).url);
+    if (urlString.startsWith('/') || urlString.startsWith(window.location.origin)) {
+      newInit.credentials = 'include';
+    }
+    const response = await originalFetch(input, newInit);
+    if (response.status === 401 && !urlString.includes("/auth/me") && !urlString.includes("/auth/login")) {
+      window.dispatchEvent(new CustomEvent("nhs-session-expired"));
+    }
     const originalJson = response.json;
     response.json = async function () {
       const data = await originalJson.call(this);

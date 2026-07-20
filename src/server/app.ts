@@ -1,5 +1,11 @@
 import express from "express";
 import path from "path";
+import cors from "cors";
+import helmet from "helmet";
+import cookieParser from "cookie-parser";
+import session from "express-session";
+import connectPgSimple from "connect-pg-simple";
+import { pool } from "./config/database";
 import { requestIdMiddleware } from "./middleware/request-id";
 import { notFoundMiddleware } from "./middleware/not-found";
 import { errorHandlerMiddleware } from "./middleware/error-handler";
@@ -19,9 +25,55 @@ import filesRouter from "./modules/files/files.routes";
 
 const app = express();
 
-// 1. Basic configuration and request tracking
+// Set trust proxy (behind Cloud Run/reverse proxies)
+app.set("trust proxy", 1);
+
+// 1. Security & Body parsing
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+  crossOriginResourcePolicy: false,
+  frameguard: false, // Permit loading in AI Studio preview iframe
+}));
+
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    if (origin.startsWith("http://localhost:") || 
+        origin.startsWith("https://localhost:") ||
+        origin.includes("run.app") ||
+        origin.includes("google.com")) {
+      return callback(null, true);
+    }
+    callback(null, true);
+  },
+  credentials: true,
+}));
+
 app.use(express.json({ limit: "25mb" }));
+app.use(cookieParser());
 app.use(requestIdMiddleware);
+
+// Initialize session store
+const PgSessionStore = connectPgSimple(session);
+const sessionStore = new PgSessionStore({
+  pool: pool,
+  tableName: "session",
+});
+
+app.use(session({
+  store: sessionStore,
+  secret: process.env.SESSION_SECRET || "nhs-super-secret-key-123456",
+  resave: false,
+  saveUninitialized: false,
+  name: "nhs_sid",
+  cookie: {
+    httpOnly: true,
+    secure: true, // true since AI Studio runs fully on HTTPS
+    sameSite: "lax",
+    maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
+  }
+}));
 
 // 2. Serve static upload assets locally if required
 app.use("/uploads", express.static(path.join(process.cwd(), "public", "uploads")));
@@ -43,6 +95,7 @@ app.get("/api/ready", async (req, res) => {
 
 // 4. Mount API Routes
 app.use("/api/auth", authRouter);
+app.use("/api/v1/auth", authRouter);
 app.use("/api/instructors", instructorsRouter);
 app.use("/api/classes", classesRouter);
 app.use("/api/logs", weeklyLogsRouter);

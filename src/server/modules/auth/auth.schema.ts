@@ -9,15 +9,29 @@ export const registerSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
   email: z.string().email("Invalid email format"),
-  password: z.string().min(6, "Password must be at least 6 characters long"),
+  password: z.string().min(10, "Password must be at least 10 characters long"),
   gender: z.string().optional(),
   center: z.string().optional(),
   courses: z.array(z.string()).optional(),
-  role: z.enum(["Instructor", "Admin"]),
+  role: z.string().optional(),
 });
 
-export const changePasswordSchema = z.object({
-  instructorId: z.string().min(1, "Instructor ID is required"),
-  currentPassword: z.string().min(1, "Current password is required"),
-  newPassword: z.string().min(6, "New password must be at least 6 characters long"),
+export const instructorRegisterSchema = z.object({
+  firstName: z.string().min(1, "First name is required").max(100),
+  lastName: z.string().min(1, "Last name is required").max(100),
+  email: z.string().email("Invalid email format").max(255),
+  password: z.string()
+    .min(10, "Password must be at least 10 characters long")
+    .max(128, "Password cannot exceed 128 characters")
+    .refine((val) => /[A-Z]/.test(val), { message: "Password must contain at least one uppercase letter" })
+    .refine((val) => /[a-z]/.test(val), { message: "Password must contain at least one lowercase letter" })
+    .refine((val) => /[0-9]/.test(val), { message: "Password must contain at least one number" }),
+  passwordConfirmation: z.string(),
+  phone: z.string().optional(),
+  center: z.string().min(1, "Centre is required"),
+  courses: z.array(z.string()).min(1, "At least one course competency must be selected"),
+  gender: z.string().optional(),
+}).refine((data) => data.password === data.passwordConfirmation, {
+  message: "Passwords do not match",
+  path: ["passwordConfirmation"],
 });

@@ -3,6 +3,7 @@ import { query } from "../../config/database";
 import { asyncHandler } from "../../utils/async-handler";
 import { sendSuccess } from "../../utils/api-response";
 import { NotFoundError } from "../../utils/errors";
+import { requireAdmin } from "../../middleware/auth";
 
 const router = Router();
 
@@ -18,7 +19,7 @@ router.get("/", asyncHandler(async (req, res) => {
   throw new NotFoundError("Default system configuration not found");
 }));
 
-router.put("/", asyncHandler(async (req, res) => {
+router.put("/", requireAdmin, asyncHandler(async (req, res) => {
   const { centers, courses, timeSlots } = req.body;
   await query(
     `UPDATE system_config 

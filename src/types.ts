@@ -1,3 +1,23 @@
+export type UserRole = 'SUPER_ADMIN' | 'ADMIN' | 'INSTRUCTOR' | 'STUDENT';
+export type UserStatus = 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'REJECTED';
+
+export interface User {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  role: UserRole;
+  status: UserStatus;
+  emailVerifiedAt?: string | null;
+  lastLoginAt?: string | null;
+  passwordChangedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  gender?: string;
+  center?: string;
+  courses?: string[];
+}
+
 export interface Instructor {
   id: string;
   firstName: string;

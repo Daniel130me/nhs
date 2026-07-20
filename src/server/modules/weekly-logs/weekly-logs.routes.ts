@@ -3,10 +3,11 @@ import { query } from "../../config/database";
 import { asyncHandler } from "../../utils/async-handler";
 import { sendSuccess } from "../../utils/api-response";
 import { weeklyLogSchema } from "./weekly-logs.schema";
+import { requireActiveUser } from "../../middleware/auth";
 
 const router = Router();
 
-router.get("/", asyncHandler(async (req, res) => {
+router.get("/", requireActiveUser, asyncHandler(async (req, res) => {
   const logs = await query("SELECT * FROM weekly_logs ORDER BY submitted_at DESC");
   const formatted = logs.map(log => ({
     id: log.id,
@@ -21,7 +22,7 @@ router.get("/", asyncHandler(async (req, res) => {
   return sendSuccess(res, formatted, "Weekly logs retrieved successfully");
 }));
 
-router.post("/", asyncHandler(async (req, res) => {
+router.post("/", requireActiveUser, asyncHandler(async (req, res) => {
   const payload = weeklyLogSchema.parse(req.body);
   const { classId, weekNumber, hoursLogged, modulesCoveredThisWeek, challenges, instructorId } = payload;
 

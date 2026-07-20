@@ -3,10 +3,11 @@ import { asyncHandler } from "../../utils/async-handler";
 import { sendSuccess } from "../../utils/api-response";
 import { uploadFileService } from "../../services/r2.service";
 import { BadRequestError } from "../../utils/errors";
+import { requireActiveUser } from "../../middleware/auth";
 
 const router = Router();
 
-router.post("/upload", asyncHandler(async (req, res) => {
+router.post("/upload", requireActiveUser, asyncHandler(async (req, res) => {
   const { fileName, mimeType, fileData } = req.body;
   if (!fileName || !mimeType || !fileData) {
     throw new BadRequestError("fileName, mimeType, and fileData are required");

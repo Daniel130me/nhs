@@ -4,10 +4,11 @@ import { asyncHandler } from "../../utils/async-handler";
 import { sendSuccess } from "../../utils/api-response";
 import { aiService } from "../../services/ai.service";
 import { BadRequestError } from "../../utils/errors";
+import { requireActiveUser } from "../../middleware/auth";
 
 const router = Router();
 
-router.get("/exam-attempts", asyncHandler(async (req, res) => {
+router.get("/exam-attempts", requireActiveUser, asyncHandler(async (req, res) => {
   const attempts = await query("SELECT * FROM exam_attempts ORDER BY taken_at DESC");
   const formatted = attempts.map(att => ({
     id: att.id,
@@ -22,7 +23,7 @@ router.get("/exam-attempts", asyncHandler(async (req, res) => {
   return sendSuccess(res, formatted, "Exam attempts retrieved successfully");
 }));
 
-router.post("/exam-attempts", asyncHandler(async (req, res) => {
+router.post("/exam-attempts", requireActiveUser, asyncHandler(async (req, res) => {
   const { id, instructorId, courseName, trialNumber, score, passed, feedback } = req.body;
   if (!instructorId || !courseName) {
     throw new BadRequestError("Missing required exam attempt fields (instructorId and courseName)");
@@ -49,7 +50,7 @@ router.post("/exam-attempts", asyncHandler(async (req, res) => {
   }, "Exam attempt recorded successfully", 201);
 }));
 
-router.post("/gemini/generate-exam", asyncHandler(async (req, res) => {
+router.post("/gemini/generate-exam", requireActiveUser, asyncHandler(async (req, res) => {
   const { courseName, lessons } = req.body;
   if (!courseName) {
     throw new BadRequestError("courseName is required");
@@ -59,7 +60,7 @@ router.post("/gemini/generate-exam", asyncHandler(async (req, res) => {
   return sendSuccess(res, examData, "Competency exam generated successfully by AI");
 }));
 
-router.post("/gemini/grade-exam", asyncHandler(async (req, res) => {
+router.post("/gemini/grade-exam", requireActiveUser, asyncHandler(async (req, res) => {
   const { questions, answers, courseName } = req.body;
   if (!questions || !answers) {
     throw new BadRequestError("questions and answers are required");

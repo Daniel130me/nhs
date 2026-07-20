@@ -914,6 +914,34 @@ export default function InstructorPortal({
     );
   }
 
+  // Pending Activation Screen
+  if (currentInstructor.status !== 'Active') {
+    return (
+      <div className="max-w-md mx-auto my-12 bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden p-8 text-center space-y-6">
+        <div className="w-16 h-16 bg-amber-50 border border-amber-200 text-amber-500 rounded-2xl flex items-center justify-center text-2xl mx-auto">
+          <Clock className="w-8 h-8 animate-pulse" />
+        </div>
+        <div>
+          <h3 className="text-lg font-bold text-slate-900 font-display">Account Pending Approval</h3>
+          <p className="text-xs text-slate-400 mt-2">
+            Hello, <strong>{currentInstructor.firstName} {currentInstructor.lastName}</strong>. Your instructor profile has been registered successfully but is currently pending administrative approval.
+          </p>
+          <p className="text-xs text-slate-400 mt-2">
+            Please contact an Administrator to activate your account and authorize access to classroom operations.
+          </p>
+        </div>
+        <div className="pt-4 border-t border-slate-100 flex flex-col gap-2">
+          <button
+            onClick={onLogout}
+            className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-lg flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+          >
+            <LogOut className="w-4 h-4" /> Sign Out & Return
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // ---- RENDER LOGGED IN INSTRUCTOR PORTAL ----
   return (
     <div className="space-y-8">

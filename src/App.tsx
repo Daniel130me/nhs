@@ -17,15 +17,57 @@ export default function App() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [examAttempts, setExamAttempts] = useState<ExamAttempt[]>([]);
   const [isDbLoading, setIsDbLoading] = useState(true);
+  const [isAuthChecking, setIsAuthChecking] = useState(true);
 
   // Session state (Instructor Portal authentication)
-  const [currentInstructor, setCurrentInstructor] = useState<Instructor | null>(() => {
-    const saved = sessionStorage.getItem('nh_session');
-    return saved ? JSON.parse(saved) : null;
-  });
+  const [currentInstructor, setCurrentInstructor] = useState<Instructor | null>(null);
 
   // Main UI Tab Router: 'Student' or 'Portal'
   const [mainTab, setMainTab] = useState<'Student' | 'Portal'>('Student');
+
+  // ---- PORTAL AUTHENTICATION RE-HYDRATION ----
+  useEffect(() => {
+    async function checkSession() {
+      try {
+        const response = await fetch("/api/v1/auth/me");
+        if (response.ok) {
+          const resData = await response.json();
+          const user = resData.data || resData;
+          const mapped: Instructor = {
+            id: user.id,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            email: user.email,
+            gender: user.gender || "Prefer not to say",
+            center: user.center || "Headquarters",
+            courses: user.courses || [],
+            role: (user.role === "ADMIN" || user.role === "SUPER_ADMIN") ? "Admin" : "Instructor",
+            status: user.status === "ACTIVE" ? "Active" : "Deactivated",
+            createdAt: user.createdAt || new Date().toISOString()
+          };
+          setCurrentInstructor(mapped);
+        } else {
+          setCurrentInstructor(null);
+        }
+      } catch (err) {
+        console.error("Failed to rehydrate auth session:", err);
+        setCurrentInstructor(null);
+      } finally {
+        setIsAuthChecking(false);
+      }
+    }
+    checkSession();
+  }, []);
+
+  // ---- SESSION EXPIRED HANDLER ----
+  useEffect(() => {
+    const handleExpired = () => {
+      setCurrentInstructor(null);
+      alert("Your session has expired. Please log in again.");
+    };
+    window.addEventListener("nhs-session-expired", handleExpired);
+    return () => window.removeEventListener("nhs-session-expired", handleExpired);
+  }, []);
 
   // ---- NEON DB INITIAL RE-HYDRATION ----
   useEffect(() => {
@@ -61,38 +103,63 @@ export default function App() {
   // ---- PORTAL AUTHENTICATION ACTIONS ----
   const handleLogin = async (email: string, password?: string): Promise<boolean> => {
     try {
-      const response = await fetch("/api/auth/login", {
+      const response = await fetch("/api/v1/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password })
       });
-      if (response.ok) {
-        const found = await response.json();
-        setCurrentInstructor(found);
-        sessionStorage.setItem('nh_session', JSON.stringify(found));
-        setInstructors((prev) => {
-          if (!prev.some((inst) => inst.id === found.id)) {
-            return [...prev, found];
-          }
-          return prev.map((inst) => (inst.id === found.id ? found : inst));
-        });
-        return true;
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || "Invalid email or password.");
       }
-      return false;
+      const resData = await response.json();
+      const user = resData.data || resData;
+      const mapped: Instructor = {
+        id: user.id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        gender: user.gender || "Prefer not to say",
+        center: user.center || "Headquarters",
+        courses: user.courses || [],
+        role: (user.role === "ADMIN" || user.role === "SUPER_ADMIN") ? "Admin" : "Instructor",
+        status: user.status === "ACTIVE" ? "Active" : "Deactivated",
+        createdAt: user.createdAt || new Date().toISOString()
+      };
+      setCurrentInstructor(mapped);
+      
+      // Re-hydrate the instructor lists in state so they are in sync
+      setInstructors((prev) => {
+        if (!prev.some((inst) => inst.id === mapped.id)) {
+          return [...prev, mapped];
+        }
+        return prev.map((inst) => (inst.id === mapped.id ? mapped : inst));
+      });
+      return true;
     } catch (err) {
       console.error("Login failure:", err);
-      return false;
+      throw err;
     }
   };
 
-  const handleLogout = () => {
-    setCurrentInstructor(null);
-    sessionStorage.removeItem('nh_session');
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/v1/auth/logout", {
+        method: "POST"
+      });
+    } catch (err) {
+      console.error("Logout endpoint failure:", err);
+    } finally {
+      setCurrentInstructor(null);
+    }
   };
 
   const handleRegister = async (newInst: Omit<Instructor, 'id' | 'createdAt'>) => {
     try {
-      const response = await fetch("/api/auth/register", {
+      const isInstructor = newInst.role === 'Instructor';
+      const registerUrl = isInstructor ? "/api/v1/auth/register/instructor" : "/api/v1/auth/register";
+
+      const response = await fetch(registerUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newInst)
@@ -101,13 +168,26 @@ export default function App() {
         const errData = await response.json().catch(() => ({}));
         throw new Error(errData.error || "Failed to register profile");
       }
-      const registered = await response.json();
-      setInstructors((prev) => [...prev, registered]);
-      if (registered.status === 'Active') {
-        setCurrentInstructor(registered);
-        sessionStorage.setItem('nh_session', JSON.stringify(registered));
+      const resData = await response.json();
+      const user = resData.data || resData;
+      const mapped: Instructor = {
+        id: user.id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        gender: user.gender || "Prefer not to say",
+        center: user.center || "Headquarters",
+        courses: user.courses || [],
+        role: (user.role === "ADMIN" || user.role === "SUPER_ADMIN") ? "Admin" : "Instructor",
+        status: user.status === "ACTIVE" ? "Active" : "Deactivated",
+        createdAt: user.createdAt || new Date().toISOString()
+      };
+
+      setInstructors((prev) => [...prev, mapped]);
+      if (mapped.status === 'Active') {
+        setCurrentInstructor(mapped);
       }
-      return registered;
+      return mapped;
     } catch (err) {
       console.error("Failed to persist instructor in Neon database:", err);
       throw err;
@@ -588,13 +668,13 @@ export default function App() {
 
       {/* CORE VIEW BODY CONTAINER */}
       <main className="flex-grow flex flex-col justify-center">
-        {isDbLoading ? (
+        {isDbLoading || isAuthChecking ? (
           /* PRE-HYDRATION SKELETON / SPINNER */
           <div className="py-20 flex flex-col items-center justify-center space-y-4">
             <Loader2 className="w-10 h-10 text-red-500 animate-spin" />
             <div className="text-center">
-              <h3 className="font-extrabold text-sm text-slate-700 tracking-wide">Syncing with Neon Postgres...</h3>
-              <p className="text-xs text-slate-400 mt-1">Hydrating student pulse surveys, active classes, and authored syllabi</p>
+              <h3 className="font-extrabold text-sm text-slate-700 tracking-wide">Syncing with Operations Portal...</h3>
+              <p className="text-xs text-slate-400 mt-1">Hydrating operational states and verifying secure session credentials</p>
             </div>
           </div>
         ) : (

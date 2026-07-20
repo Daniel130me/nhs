@@ -3,6 +3,7 @@ import { query } from "../../config/database";
 import { asyncHandler } from "../../utils/async-handler";
 import { sendSuccess } from "../../utils/api-response";
 import { classSchema } from "./classes.schema";
+import { requireActiveUser } from "../../middleware/auth";
 
 const router = Router();
 
@@ -27,7 +28,7 @@ router.get("/", asyncHandler(async (req, res) => {
   return sendSuccess(res, formatted, "Classes retrieved successfully");
 }));
 
-router.post("/", asyncHandler(async (req, res) => {
+router.post("/", requireActiveUser, asyncHandler(async (req, res) => {
   const payload = classSchema.parse(req.body);
   const {
     courseName,
@@ -86,7 +87,7 @@ router.post("/", asyncHandler(async (req, res) => {
   }, "Class created successfully", 201);
 }));
 
-router.put("/:id", asyncHandler(async (req, res) => {
+router.put("/:id", requireActiveUser, asyncHandler(async (req, res) => {
   const { id } = req.params;
   const {
     courseName,
@@ -129,7 +130,7 @@ router.put("/:id", asyncHandler(async (req, res) => {
   return sendSuccess(res, { success: true }, "Class updated successfully");
 }));
 
-router.delete("/:id", asyncHandler(async (req, res) => {
+router.delete("/:id", requireActiveUser, asyncHandler(async (req, res) => {
   const { id } = req.params;
   await query("DELETE FROM classes WHERE id = $1", [id]);
   return sendSuccess(res, { success: true }, "Class deleted successfully");

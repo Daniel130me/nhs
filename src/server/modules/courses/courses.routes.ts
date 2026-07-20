@@ -4,6 +4,7 @@ import { asyncHandler } from "../../utils/async-handler";
 import { sendSuccess } from "../../utils/api-response";
 import { aiService } from "../../services/ai.service";
 import { BadRequestError } from "../../utils/errors";
+import { requireActiveUser } from "../../middleware/auth";
 
 const router = Router();
 
@@ -13,7 +14,7 @@ router.get("/", asyncHandler(async (req, res) => {
   return sendSuccess(res, courses, "Courses retrieved successfully");
 }));
 
-router.post("/", asyncHandler(async (req, res) => {
+router.post("/", requireActiveUser, asyncHandler(async (req, res) => {
   const { id, name, category, description, lessons } = req.body;
   if (!name || !category) {
     throw new BadRequestError("Name and Category are required");
@@ -42,14 +43,14 @@ router.post("/", asyncHandler(async (req, res) => {
   return sendSuccess(res, { id: crsId, name, category, description, lessons, createdAt }, "Course saved successfully");
 }));
 
-router.delete("/:id", asyncHandler(async (req, res) => {
+router.delete("/:id", requireActiveUser, asyncHandler(async (req, res) => {
   const { id } = req.params;
   await query("DELETE FROM courses WHERE id = $1", [id]);
   return sendSuccess(res, { success: true }, "Course deleted successfully");
 }));
 
 // --- AI Gemini Integration ---
-router.post("/gemini/author-course", asyncHandler(async (req, res) => {
+router.post("/gemini/author-course", requireActiveUser, asyncHandler(async (req, res) => {
   const { courseName, category } = req.body;
   if (!courseName) {
     throw new BadRequestError("courseName is required");

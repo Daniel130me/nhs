@@ -3,10 +3,11 @@ import { query } from "../../config/database";
 import { asyncHandler } from "../../utils/async-handler";
 import { sendSuccess } from "../../utils/api-response";
 import { surveySchema } from "./surveys.schema";
+import { requireActiveUser } from "../../middleware/auth";
 
 const router = Router();
 
-router.get("/", asyncHandler(async (req, res) => {
+router.get("/", requireActiveUser, asyncHandler(async (req, res) => {
   const surveys = await query("SELECT * FROM student_surveys ORDER BY submitted_at DESC");
   const formatted = surveys.map(s => ({
     id: s.id,
