@@ -2,6 +2,7 @@ import { query } from "../config/database";
 import { logger } from "../utils/logger";
 import { DEFAULT_CONFIG, SEED_INSTRUCTORS, SEED_CLASSES, SEED_LOGS, SEED_SURVEYS } from "../../data/seedData";
 import { Course } from "../../types";
+import { runDataMigration } from "../services/migration.service";
 
 interface Migration {
   id: string;
@@ -233,6 +234,166 @@ const MIGRATIONS: Migration[] = [
       `CREATE INDEX IF NOT EXISTS audit_logs_entity_idx ON audit_logs(entity_type, entity_id);`,
       `CREATE INDEX IF NOT EXISTS audit_logs_created_idx ON audit_logs(created_at DESC);`
     ]
+  },
+  {
+    id: "011_normalized_academic_model",
+    queries: [
+      `DO $$
+      BEGIN
+        IF EXISTS (SELECT 1 FROM pg_tables WHERE tablename = 'courses') AND NOT EXISTS (SELECT 1 FROM pg_tables WHERE tablename = 'courses_old') THEN
+          ALTER TABLE courses RENAME TO courses_old;
+        END IF;
+        IF EXISTS (SELECT 1 FROM pg_tables WHERE tablename = 'classes') AND NOT EXISTS (SELECT 1 FROM pg_tables WHERE tablename = 'classes_old') THEN
+          ALTER TABLE classes RENAME TO classes_old;
+        END IF;
+      END$$;`,
+      `DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'publication_status') THEN
+          CREATE TYPE publication_status AS ENUM ('DRAFT', 'PUBLISHED', 'ARCHIVED');
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'lesson_type') THEN
+          CREATE TYPE lesson_type AS ENUM ('TEXT', 'VIDEO', 'PDF', 'DOCUMENT', 'QUIZ', 'ASSIGNMENT', 'LIVE_CLASS', 'EXTERNAL_LINK');
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'class_status') THEN
+          CREATE TYPE class_status AS ENUM ('DRAFT', 'SCHEDULED', 'ACTIVE', 'PAUSED', 'COMPLETED', 'CANCELLED', 'ARCHIVED');
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'enrolment_status') THEN
+          CREATE TYPE enrolment_status AS ENUM ('INVITED', 'ACTIVE', 'SUSPENDED', 'COMPLETED', 'WITHDRAWN');
+        END IF;
+      END$$;`,
+      `CREATE TABLE IF NOT EXISTS centres (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name VARCHAR(150) NOT NULL,
+        code VARCHAR(50) NOT NULL UNIQUE,
+        address TEXT,
+        city VARCHAR(100),
+        state VARCHAR(100),
+        country VARCHAR(100) NOT NULL DEFAULT 'Nigeria',
+        timezone VARCHAR(100) NOT NULL DEFAULT 'Africa/Lagos',
+        status VARCHAR(30) NOT NULL DEFAULT 'ACTIVE',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );`,
+      `CREATE TABLE IF NOT EXISTS instructor_profiles (
+        user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        centre_id UUID REFERENCES centres(id),
+        phone VARCHAR(30),
+        bio TEXT,
+        qualification TEXT,
+        profile_image_key TEXT,
+        approved_by UUID REFERENCES users(id),
+        approved_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );`,
+      `CREATE TABLE IF NOT EXISTS student_profiles (
+        user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        student_number VARCHAR(100) NOT NULL UNIQUE,
+        centre_id UUID REFERENCES centres(id),
+        phone VARCHAR(30),
+        profile_image_key TEXT,
+        admission_date DATE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );`,
+      `CREATE TABLE IF NOT EXISTS courses (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        code VARCHAR(100) NOT NULL UNIQUE,
+        title VARCHAR(255) NOT NULL,
+        short_description TEXT,
+        full_description TEXT,
+        thumbnail_file_id UUID,
+        status publication_status NOT NULL DEFAULT 'DRAFT',
+        created_by UUID NOT NULL REFERENCES users(id),
+        published_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        deleted_at TIMESTAMPTZ
+      );`,
+      `CREATE TABLE IF NOT EXISTS course_versions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        course_id UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+        version_number INTEGER NOT NULL,
+        title VARCHAR(255) NOT NULL,
+        description TEXT,
+        status publication_status NOT NULL DEFAULT 'DRAFT',
+        created_by UUID NOT NULL REFERENCES users(id),
+        published_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE(course_id, version_number)
+      );`,
+      `CREATE TABLE IF NOT EXISTS course_modules (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        course_version_id UUID NOT NULL REFERENCES course_versions(id) ON DELETE CASCADE,
+        title VARCHAR(255) NOT NULL,
+        description TEXT,
+        position INTEGER NOT NULL,
+        estimated_minutes INTEGER,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE(course_version_id, position)
+      );`,
+      `CREATE TABLE IF NOT EXISTS lessons (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        module_id UUID NOT NULL REFERENCES course_modules(id) ON DELETE CASCADE,
+        title VARCHAR(255) NOT NULL,
+        description TEXT,
+        content TEXT,
+        lesson_type lesson_type NOT NULL DEFAULT 'TEXT',
+        position INTEGER NOT NULL,
+        estimated_minutes INTEGER,
+        is_preview BOOLEAN NOT NULL DEFAULT FALSE,
+        is_required BOOLEAN NOT NULL DEFAULT TRUE,
+        status publication_status NOT NULL DEFAULT 'DRAFT',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE(module_id, position)
+      );`,
+      `CREATE TABLE IF NOT EXISTS classes (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        course_version_id UUID NOT NULL REFERENCES course_versions(id),
+        centre_id UUID REFERENCES centres(id),
+        code VARCHAR(100) NOT NULL UNIQUE,
+        name VARCHAR(255) NOT NULL,
+        delivery_mode VARCHAR(30) NOT NULL,
+        capacity INTEGER,
+        start_date DATE NOT NULL,
+        end_date DATE NOT NULL,
+        timezone VARCHAR(100) NOT NULL DEFAULT 'Africa/Lagos',
+        status class_status NOT NULL DEFAULT 'DRAFT',
+        created_by UUID NOT NULL REFERENCES users(id),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        CHECK (end_date >= start_date),
+        CHECK (capacity IS NULL OR capacity > 0)
+      );`,
+      `CREATE TABLE IF NOT EXISTS class_instructors (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        class_id UUID NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+        instructor_id UUID NOT NULL REFERENCES users(id),
+        role VARCHAR(50) NOT NULL DEFAULT 'PRIMARY',
+        assigned_by UUID NOT NULL REFERENCES users(id),
+        assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE(class_id, instructor_id)
+      );`,
+      `CREATE TABLE IF NOT EXISTS enrolments (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        class_id UUID NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+        student_id UUID NOT NULL REFERENCES users(id),
+        status enrolment_status NOT NULL DEFAULT 'ACTIVE',
+        enrolled_by UUID REFERENCES users(id),
+        enrolled_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        completed_at TIMESTAMPTZ,
+        UNIQUE(class_id, student_id)
+      );`,
+      `CREATE TABLE IF NOT EXISTS migration_id_mappings (
+        entity_type VARCHAR(50) NOT NULL,
+        old_id VARCHAR(100) NOT NULL,
+        new_id UUID NOT NULL,
+        PRIMARY KEY (entity_type, old_id)
+      );`
+    ]
   }
 ];
 
@@ -276,6 +437,14 @@ export async function migrate(): Promise<void> {
 
   // 4. Run seeding checks inside the same flow
   await seedDatabase();
+
+  // 5. Run academic model data migration/normalization
+  try {
+    const report = await runDataMigration();
+    logger.info("[Migration] Academic model data normalization report:", report);
+  } catch (err: any) {
+    logger.error("[Migration] Failed to run academic model data normalization:", err);
+  }
 }
 
 async function seedDatabase(): Promise<void> {
@@ -321,12 +490,17 @@ async function seedDatabase(): Promise<void> {
   }
 
   // Seed Classes if missing
-  const classCount = await query("SELECT COUNT(*) FROM classes");
+  const oldClassesTableExists = await query(
+    "SELECT 1 FROM pg_tables WHERE tablename = 'classes_old'"
+  );
+  const targetClassesTable = oldClassesTableExists.length > 0 ? "classes_old" : "classes";
+
+  const classCount = await query(`SELECT COUNT(*) FROM ${targetClassesTable}`);
   if (parseInt(classCount[0].count) === 0) {
-    logger.info("[Seed] Seeding classes...");
+    logger.info(`[Seed] Seeding classes into ${targetClassesTable}...`);
     for (const cls of SEED_CLASSES) {
       await query(
-        `INSERT INTO classes (id, course_name, instructor_id, instructor_name, total_duration_hours, classroom, schedule_type, days, time_slot, start_date, end_date, modules, status, created_at)
+        `INSERT INTO ${targetClassesTable} (id, course_name, instructor_id, instructor_name, total_duration_hours, classroom, schedule_type, days, time_slot, start_date, end_date, modules, status, created_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
         [
           cls.id,
@@ -414,9 +588,14 @@ async function seedDatabase(): Promise<void> {
   }
 
   // Seed Courses if missing
-  const courseCountDb = await query("SELECT COUNT(*) FROM courses");
+  const oldCoursesTableExists = await query(
+    "SELECT 1 FROM pg_tables WHERE tablename = 'courses_old'"
+  );
+  const targetCoursesTable = oldCoursesTableExists.length > 0 ? "courses_old" : "courses";
+
+  const courseCountDb = await query(`SELECT COUNT(*) FROM ${targetCoursesTable}`);
   if (parseInt(courseCountDb[0].count) === 0) {
-    logger.info("[Seed] Seeding rich courses list...");
+    logger.info(`[Seed] Seeding rich courses list into ${targetCoursesTable}...`);
     
     const initialRich: Course[] = [];
     DEFAULT_CONFIG.courses.forEach((cat) => {
@@ -470,7 +649,7 @@ async function seedDatabase(): Promise<void> {
 
     for (const crs of initialRich) {
       await query(
-        `INSERT INTO courses (id, name, category, description, lessons, created_at)
+        `INSERT INTO ${targetCoursesTable} (id, name, category, description, lessons, created_at)
          VALUES ($1, $2, $3, $4, $5, $6)`,
         [
           crs.id,
