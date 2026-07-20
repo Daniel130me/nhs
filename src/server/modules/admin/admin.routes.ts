@@ -6,6 +6,10 @@ import { BadRequestError, NotFoundError } from "../../utils/errors";
 import { requireRole } from "../../middleware/auth";
 import { logAudit } from "../../utils/audit";
 import { z } from "zod";
+import { createStudentSchema, importStudentsSchema, enrolmentSchema } from "./admin.schema";
+import crypto from "crypto";
+import argon2 from "argon2";
+import { emailService } from "../../services/email.service";
 
 const router = Router();
 
@@ -413,6 +417,267 @@ router.patch(
     });
 
     return sendSuccess(res, { success: true, role: newRole }, "User role updated successfully.");
+  })
+);
+
+// Helper function to create and invite student using transactions
+async function createAndInviteStudentTx(
+  adminId: string,
+  adminEmail: string,
+  data: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    studentNumber?: string;
+    phone?: string | null;
+    centerId?: string | null;
+    gender?: string | null;
+  }
+) {
+  const normalizedEmail = data.email.trim().toLowerCase();
+  
+  // Check if user already exists
+  const existing = await query("SELECT id FROM users WHERE LOWER(email) = LOWER($1) AND deleted_at IS NULL", [normalizedEmail]);
+  if (existing.length > 0) {
+    throw new BadRequestError(`A student with email ${normalizedEmail} already exists.`);
+  }
+
+  // Get center name if centerId is provided
+  let centerName: string | null = null;
+  if (data.centerId) {
+    const centerRes = await query("SELECT name FROM centres WHERE id = $1", [data.centerId]);
+    if (centerRes.length > 0) {
+      centerName = centerRes[0].name;
+    }
+  }
+
+  const finalStudentNumber = data.studentNumber || "NHS-STU-" + Date.now().toString().slice(-6) + "-" + Math.floor(1000 + Math.random() * 9000);
+  const userId = crypto.randomUUID();
+  const tempHash = await argon2.hash(crypto.randomBytes(32).toString("hex"), { type: argon2.argon2id });
+
+  await query("BEGIN");
+  try {
+    // Insert into users
+    await query(
+      `INSERT INTO users (id, first_name, last_name, email, password_hash, role, status, center, gender, is_password_migrated)
+       VALUES ($1, $2, $3, $4, $5, 'STUDENT', 'PENDING', $6, $7, TRUE)`,
+      [userId, data.firstName, data.lastName, normalizedEmail, tempHash, centerName, data.gender || null]
+    );
+
+    // Insert into student_profiles
+    await query(
+      `INSERT INTO student_profiles (user_id, student_number, centre_id, phone, admission_date)
+       VALUES ($1, $2, $3, $4, NOW())`,
+      [userId, finalStudentNumber, data.centerId || null, data.phone || null]
+    );
+
+    // Create invitation
+    const rawToken = crypto.randomBytes(32).toString("hex");
+    const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+    await query(
+      `INSERT INTO user_invitations (email, role, token_hash, invited_by, expires_at)
+       VALUES ($1, 'STUDENT', $2, $3, $4)`,
+      [normalizedEmail, tokenHash, adminId, expiresAt]
+    );
+
+    // Send email
+    await emailService.sendInvitation(normalizedEmail, rawToken, "STUDENT", adminEmail);
+
+    await query("COMMIT");
+
+    return {
+      id: userId,
+      firstName: data.firstName,
+      lastName: data.lastName,
+      email: normalizedEmail,
+      studentNumber: finalStudentNumber,
+    };
+  } catch (err) {
+    await query("ROLLBACK");
+    throw err;
+  }
+}
+
+// POST /api/v1/admin/students
+router.post(
+  "/students",
+  asyncHandler(async (req, res) => {
+    const data = createStudentSchema.parse(req.body);
+    const result = await createAndInviteStudentTx(req.user!.id, req.user!.email, data);
+
+    await logAudit({
+      req,
+      action: "Create Student",
+      entityType: "user",
+      entityId: result.id,
+      newValues: result
+    });
+
+    return sendSuccess(res, result, "Student created and invitation sent successfully", 201);
+  })
+);
+
+// POST /api/v1/admin/students/import
+router.post(
+  "/students/import",
+  asyncHandler(async (req, res) => {
+    const { students } = importStudentsSchema.parse(req.body);
+    const results: any[] = [];
+    const errors: any[] = [];
+
+    for (const student of students) {
+      try {
+        const result = await createAndInviteStudentTx(req.user!.id, req.user!.email, student);
+        results.push(result);
+        
+        await logAudit({
+          req,
+          action: "Import Student",
+          entityType: "user",
+          entityId: result.id,
+          newValues: result
+        });
+      } catch (err: any) {
+        errors.push({
+          email: student.email,
+          error: err.message || "Unknown error during student creation"
+        });
+      }
+    }
+
+    return sendSuccess(
+      res,
+      {
+        importedCount: results.length,
+        failedCount: errors.length,
+        imported: results,
+        errors
+      },
+      `Successfully imported ${results.length} students. Failed imports: ${errors.length}`
+    );
+  })
+);
+
+// POST /api/v1/admin/students/:id/invite
+router.post(
+  "/students/:id/invite",
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+
+    const students = await query<any>(
+      "SELECT id, first_name, last_name, email FROM users WHERE id = $1 AND role = 'STUDENT' AND deleted_at IS NULL",
+      [id]
+    );
+
+    if (students.length === 0) {
+      throw new NotFoundError("Student not found.");
+    }
+
+    const student = students[0];
+    const rawToken = crypto.randomBytes(32).toString("hex");
+    const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+    await query(
+      `INSERT INTO user_invitations (email, role, token_hash, invited_by, expires_at)
+       VALUES ($1, 'STUDENT', $2, $3, $4)`,
+      [student.email, tokenHash, req.user!.id, expiresAt]
+    );
+
+    await emailService.sendInvitation(student.email, rawToken, "STUDENT", req.user!.email);
+
+    await logAudit({
+      req,
+      action: "Reinvite Student",
+      entityType: "user",
+      entityId: student.id,
+      metadata: { email: student.email }
+    });
+
+    return sendSuccess(res, { success: true }, "Invitation generated and sent successfully");
+  })
+);
+
+// POST /api/v1/admin/classes/:classId/enrolments
+router.post(
+  "/classes/:classId/enrolments",
+  asyncHandler(async (req, res) => {
+    const { classId } = req.params;
+    const { studentId } = enrolmentSchema.parse(req.body);
+
+    // Verify class exists
+    const classes = await query<any>("SELECT id, name FROM classes WHERE id = $1", [classId]);
+    if (classes.length === 0) {
+      throw new NotFoundError("Class not found.");
+    }
+    const cls = classes[0];
+
+    // Verify student exists and is a student
+    const students = await query<any>(
+      "SELECT id, first_name, last_name, email FROM users WHERE id = $1 AND role = 'STUDENT' AND deleted_at IS NULL",
+      [studentId]
+    );
+    if (students.length === 0) {
+      throw new NotFoundError("Student user not found.");
+    }
+    const student = students[0];
+
+    // Check duplicate enrolment
+    const duplicate = await query("SELECT id FROM enrolments WHERE class_id = $1 AND student_id = $2", [classId, studentId]);
+    if (duplicate.length > 0) {
+      throw new BadRequestError("Student is already enrolled in this class.");
+    }
+
+    const enrolmentId = crypto.randomUUID();
+    await query(
+      `INSERT INTO enrolments (id, class_id, student_id, status, enrolled_by, enrolled_at)
+       VALUES ($1, $2, $3, 'ACTIVE', $4, NOW())`,
+      [enrolmentId, classId, studentId, req.user!.id]
+    );
+
+    await emailService.sendClassEnrolment(student.email, student.first_name, cls.name);
+
+    await logAudit({
+      req,
+      action: "Enrol Student",
+      entityType: "enrolment",
+      entityId: enrolmentId,
+      newValues: { classId, studentId }
+    });
+
+    return sendSuccess(res, { id: enrolmentId, classId, studentId, status: "ACTIVE" }, "Student enrolled in class successfully", 201);
+  })
+);
+
+// DELETE /api/v1/admin/classes/:classId/enrolments/:enrolmentId
+router.delete(
+  "/classes/:classId/enrolments/:enrolmentId",
+  asyncHandler(async (req, res) => {
+    const { classId, enrolmentId } = req.params;
+
+    // Verify enrolment exists by id or by student_id or combination
+    const enrols = await query<any>(
+      "SELECT id, student_id FROM enrolments WHERE class_id = $1 AND id = $2",
+      [classId, enrolmentId]
+    );
+
+    if (enrols.length === 0) {
+      throw new NotFoundError("Enrolment not found for this class.");
+    }
+
+    await query("DELETE FROM enrolments WHERE class_id = $1 AND id = $2", [classId, enrolmentId]);
+
+    await logAudit({
+      req,
+      action: "Unenrol Student",
+      entityType: "enrolment",
+      entityId: enrolmentId,
+      metadata: { classId }
+    });
+
+    return sendSuccess(res, { success: true }, "Student unenrolled from class successfully");
   })
 );
 

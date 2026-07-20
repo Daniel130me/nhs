@@ -2,7 +2,16 @@ import { Router } from "express";
 import crypto from "crypto";
 import argon2 from "argon2";
 import { query } from "../../config/database";
-import { loginSchema, registerSchema, instructorRegisterSchema } from "./auth.schema";
+import { 
+  loginSchema, 
+  registerSchema, 
+  instructorRegisterSchema,
+  acceptInvitationSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
+  verifyEmailSchema
+} from "./auth.schema";
+import { emailService } from "../../services/email.service";
 import { asyncHandler } from "../../utils/async-handler";
 import { sendSuccess } from "../../utils/api-response";
 import { BadRequestError, UnauthorizedError, NotFoundError } from "../../utils/errors";
@@ -436,6 +445,306 @@ router.post(
     logger.info(`[Auth Security] Password changed successfully for user ${user.email}`);
 
     return sendSuccess(res, { success: true }, "Password changed successfully.");
+  })
+);
+
+// GET /api/v1/auth/invitations/:token
+router.get(
+  "/invitations/:token",
+  asyncHandler(async (req, res) => {
+    const { token } = req.params;
+    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+
+    const invitations = await query<any>(
+      `SELECT id, email, role, expires_at, accepted_at 
+       FROM user_invitations 
+       WHERE token_hash = $1`,
+      [tokenHash]
+    );
+
+    if (invitations.length === 0) {
+      throw new BadRequestError("Invalid or already accepted invitation link.");
+    }
+
+    const invitation = invitations[0];
+    if (new Date() > new Date(invitation.expires_at)) {
+      throw new BadRequestError("This invitation link has expired.");
+    }
+
+    if (invitation.accepted_at) {
+      throw new BadRequestError("This invitation link has already been accepted.");
+    }
+
+    return sendSuccess(
+      res,
+      {
+        email: invitation.email,
+        role: invitation.role,
+      },
+      "Invitation link verified successfully"
+    );
+  })
+);
+
+// POST /api/v1/auth/invitations/:token/accept
+router.post(
+  "/invitations/:token/accept",
+  asyncHandler(async (req, res) => {
+    const { token } = req.params;
+    const { password } = acceptInvitationSchema.parse(req.body);
+
+    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+
+    const invitations = await query<any>(
+      `SELECT id, email, role, expires_at, accepted_at 
+       FROM user_invitations 
+       WHERE token_hash = $1`,
+      [tokenHash]
+    );
+
+    if (invitations.length === 0) {
+      throw new BadRequestError("Invalid or already accepted invitation link.");
+    }
+
+    const invitation = invitations[0];
+    if (new Date() > new Date(invitation.expires_at)) {
+      throw new BadRequestError("This invitation link has expired.");
+    }
+
+    if (invitation.accepted_at) {
+      throw new BadRequestError("This invitation link has already been accepted.");
+    }
+
+    // Find the corresponding user
+    const users = await query<any>(
+      "SELECT id, email, role FROM users WHERE LOWER(email) = LOWER($1) AND deleted_at IS NULL",
+      [invitation.email]
+    );
+
+    if (users.length === 0) {
+      throw new NotFoundError("Associated user record not found.");
+    }
+
+    const user = users[0];
+    const passwordHash = await argon2.hash(password, { type: argon2.argon2id });
+
+    await query("BEGIN");
+    try {
+      // Mark invitation accepted
+      await query("UPDATE user_invitations SET accepted_at = NOW() WHERE id = $1", [invitation.id]);
+
+      // Update user password and set active status (email verified will happen on verification token accept)
+      await query(
+        `UPDATE users 
+         SET password_hash = $1, is_password_migrated = TRUE, updated_at = NOW() 
+         WHERE id = $2`,
+        [passwordHash, user.id]
+      );
+
+      if (user.role === "INSTRUCTOR") {
+        await query("UPDATE instructors SET password = $1, status = 'Active' WHERE id = $2", [passwordHash, user.id]);
+      }
+
+      // Generate email verification token
+      const verifyToken = crypto.randomBytes(32).toString("hex");
+      const verifyHash = crypto.createHash("sha256").update(verifyToken).digest("hex");
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+      await query(
+        `INSERT INTO email_verification_tokens (user_id, token_hash, expires_at) 
+         VALUES ($1, $2, $3)`,
+        [user.id, verifyHash, expiresAt]
+      );
+
+      // Send verification email
+      await emailService.sendEmailVerification(user.email, verifyToken);
+
+      await query("COMMIT");
+
+      return sendSuccess(
+        res,
+        { success: true },
+        "Invitation accepted successfully. An email verification link has been sent to your email."
+      );
+    } catch (err) {
+      await query("ROLLBACK");
+      throw err;
+    }
+  })
+);
+
+// POST /api/v1/auth/forgot-password
+router.post(
+  "/forgot-password",
+  asyncHandler(async (req, res) => {
+    const { email } = forgotPasswordSchema.parse(req.body);
+    const normalizedEmail = email.trim().toLowerCase();
+
+    const users = await query<any>(
+      "SELECT id, email FROM users WHERE LOWER(email) = LOWER($1) AND deleted_at IS NULL",
+      [normalizedEmail]
+    );
+
+    // Prevent email enumeration: always send success response
+    const successMsg = "If that email exists in our system, we have sent a password reset link.";
+
+    if (users.length === 0) {
+      return sendSuccess(res, { success: true }, successMsg);
+    }
+
+    const user = users[0];
+    const resetToken = crypto.randomBytes(32).toString("hex");
+    const tokenHash = crypto.createHash("sha256").update(resetToken).digest("hex");
+    const expiresAt = new Date(Date.now() + 1 * 60 * 60 * 1000); // 1 hour
+
+    await query("BEGIN");
+    try {
+      // Invalidate existing active reset tokens
+      await query(
+        "UPDATE password_reset_tokens SET used_at = NOW() WHERE user_id = $1 AND used_at IS NULL",
+        [user.id]
+      );
+
+      // Insert new token
+      await query(
+        `INSERT INTO password_reset_tokens (user_id, token_hash, expires_at) 
+         VALUES ($1, $2, $3)`,
+        [user.id, tokenHash, expiresAt]
+      );
+
+      // Send reset password email
+      await emailService.sendPasswordReset(user.email, resetToken);
+
+      await query("COMMIT");
+    } catch (err) {
+      await query("ROLLBACK");
+      throw err;
+    }
+
+    return sendSuccess(res, { success: true }, successMsg);
+  })
+);
+
+// POST /api/v1/auth/reset-password
+router.post(
+  "/reset-password",
+  asyncHandler(async (req, res) => {
+    const token = req.body.token || req.query.token;
+    if (!token || typeof token !== "string") {
+      throw new BadRequestError("Token is required.");
+    }
+
+    const { password } = resetPasswordSchema.parse(req.body);
+    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+
+    const tokens = await query<any>(
+      `SELECT id, user_id, expires_at, used_at 
+       FROM password_reset_tokens 
+       WHERE token_hash = $1`,
+      [tokenHash]
+    );
+
+    if (tokens.length === 0) {
+      throw new BadRequestError("Invalid or already used password reset link.");
+    }
+
+    const rToken = tokens[0];
+    if (new Date() > new Date(rToken.expires_at)) {
+      throw new BadRequestError("This password reset link has expired.");
+    }
+
+    if (rToken.used_at) {
+      throw new BadRequestError("This password reset link has already been used.");
+    }
+
+    const passwordHash = await argon2.hash(password, { type: argon2.argon2id });
+
+    await query("BEGIN");
+    try {
+      // Mark token used
+      await query("UPDATE password_reset_tokens SET used_at = NOW() WHERE id = $1", [rToken.id]);
+
+      // Update password
+      await query(
+        `UPDATE users SET password_hash = $1, is_password_migrated = TRUE, updated_at = NOW() WHERE id = $2`,
+        [passwordHash, rToken.user_id]
+      );
+
+      // Invalidate legacy instructors if role is instructor
+      const users = await query<any>("SELECT role, id FROM users WHERE id = $1", [rToken.user_id]);
+      if (users.length > 0 && users[0].role === "INSTRUCTOR") {
+        await query("UPDATE instructors SET password = $1 WHERE id = $2", [passwordHash, rToken.user_id]);
+      }
+
+      // Invalidate all active sessions for this user
+      await query(`DELETE FROM "session" WHERE sess::text LIKE $1`, [`%"userId":"${rToken.user_id}"%`]);
+
+      await query("COMMIT");
+
+      return sendSuccess(res, { success: true }, "Password reset successfully. You can now log in.");
+    } catch (err) {
+      await query("ROLLBACK");
+      throw err;
+    }
+  })
+);
+
+// POST /api/v1/auth/verify-email
+router.post(
+  "/verify-email",
+  asyncHandler(async (req, res) => {
+    const token = req.body.token || req.query.token;
+    if (!token || typeof token !== "string") {
+      throw new BadRequestError("Token is required.");
+    }
+
+    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+
+    const tokens = await query<any>(
+      `SELECT id, user_id, expires_at, used_at 
+       FROM email_verification_tokens 
+       WHERE token_hash = $1`,
+      [tokenHash]
+    );
+
+    if (tokens.length === 0) {
+      throw new BadRequestError("Invalid or already used email verification link.");
+    }
+
+    const vToken = tokens[0];
+    if (new Date() > new Date(vToken.expires_at)) {
+      throw new BadRequestError("This email verification link has expired.");
+    }
+
+    if (vToken.used_at) {
+      throw new BadRequestError("This email verification link has already been used.");
+    }
+
+    await query("BEGIN");
+    try {
+      // Mark token used
+      await query("UPDATE email_verification_tokens SET used_at = NOW() WHERE id = $1", [vToken.id]);
+
+      // Set user status ACTIVE and email_verified_at
+      await query(
+        `UPDATE users 
+         SET email_verified_at = NOW(), status = 'ACTIVE', updated_at = NOW() 
+         WHERE id = $1`,
+         [vToken.user_id]
+      );
+
+      const users = await query<any>("SELECT first_name, email FROM users WHERE id = $1", [vToken.user_id]);
+      if (users.length > 0) {
+        await emailService.sendAccountApproved(users[0].email, users[0].first_name);
+      }
+
+      await query("COMMIT");
+
+      return sendSuccess(res, { success: true }, "Email verified successfully. Your account is now fully active.");
+    } catch (err) {
+      await query("ROLLBACK");
+      throw err;
+    }
   })
 );
 
