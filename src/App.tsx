@@ -6,6 +6,7 @@ import { DEFAULT_CONFIG, SEED_INSTRUCTORS, SEED_CLASSES, SEED_LOGS, SEED_SURVEYS
 import StudentSurvey from './components/StudentSurvey';
 import InstructorPortal from './components/InstructorPortal';
 import AdminDashboard from './components/AdminDashboard';
+import StudentPortal from './components/StudentPortal';
 
 export default function App() {
   // ---- BROWSER PERSISTENT STATES (HYDRATED FROM NEON POSTGRES) ----
@@ -41,7 +42,7 @@ export default function App() {
             gender: user.gender || "Prefer not to say",
             center: user.center || "Headquarters",
             courses: user.courses || [],
-            role: (user.role === "ADMIN" || user.role === "SUPER_ADMIN") ? "Admin" : "Instructor",
+            role: (user.role === "ADMIN" || user.role === "SUPER_ADMIN") ? "Admin" : (user.role === "STUDENT" ? "Student" : "Instructor"),
             status: user.status === "ACTIVE" ? "Active" : "Deactivated",
             createdAt: user.createdAt || new Date().toISOString()
           };
@@ -122,7 +123,7 @@ export default function App() {
         gender: user.gender || "Prefer not to say",
         center: user.center || "Headquarters",
         courses: user.courses || [],
-        role: (user.role === "ADMIN" || user.role === "SUPER_ADMIN") ? "Admin" : "Instructor",
+        role: (user.role === "ADMIN" || user.role === "SUPER_ADMIN") ? "Admin" : (user.role === "STUDENT" ? "Student" : "Instructor"),
         status: user.status === "ACTIVE" ? "Active" : "Deactivated",
         createdAt: user.createdAt || new Date().toISOString()
       };
@@ -178,7 +179,7 @@ export default function App() {
         gender: user.gender || "Prefer not to say",
         center: user.center || "Headquarters",
         courses: user.courses || [],
-        role: (user.role === "ADMIN" || user.role === "SUPER_ADMIN") ? "Admin" : "Instructor",
+        role: (user.role === "ADMIN" || user.role === "SUPER_ADMIN") ? "Admin" : (user.role === "STUDENT" ? "Student" : "Instructor"),
         status: user.status === "ACTIVE" ? "Active" : "Deactivated",
         createdAt: user.createdAt || new Date().toISOString()
       };
@@ -734,6 +735,9 @@ export default function App() {
                       onUpdateInstructorStatus={handleUpdateInstructorStatus}
                     />
                   </div>
+                ) : currentInstructor && currentInstructor.role === 'Student' ? (
+                  /* STUDENT PORTAL VIEW */
+                  <StudentPortal currentStudent={currentInstructor} onLogout={handleLogout} />
                 ) : (
                   /* INSTRUCTOR VIEW (OR LOGIN) */
                   <InstructorPortal

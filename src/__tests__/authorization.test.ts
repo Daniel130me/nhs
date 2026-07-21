@@ -85,9 +85,11 @@ describe("Role-Based Authorization & Middleware Policies", () => {
     req.params.id = "class-99"; // Target class ID
 
     // Mock database returning a class belonging to instructor-2
-    vi.mocked(query).mockResolvedValueOnce([
-      { id: "class-99", instructor_id: "instructor-2" },
-    ]);
+    vi.mocked(query)
+      .mockResolvedValueOnce([
+        { id: "class-99" },
+      ])
+      .mockResolvedValueOnce([]); // empty assignment array for class_instructors
 
     const middleware = requireClassInstructor("id");
 

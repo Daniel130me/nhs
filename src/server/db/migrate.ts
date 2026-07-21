@@ -501,6 +501,143 @@ const MIGRATIONS: Migration[] = [
         PRIMARY KEY(weekly_log_id, module_id)
       );`
     ]
+  },
+  {
+    id: "014_assignments_and_submissions_tables",
+    queries: [
+      `CREATE TABLE IF NOT EXISTS files (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name VARCHAR(255) NOT NULL,
+        url TEXT NOT NULL,
+        mime_type VARCHAR(100),
+        size INTEGER,
+        uploaded_by UUID REFERENCES users(id),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );`,
+      `DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'assignment_status') THEN
+          CREATE TYPE assignment_status AS ENUM ('DRAFT', 'PUBLISHED', 'CLOSED', 'ARCHIVED');
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'submission_status') THEN
+          CREATE TYPE submission_status AS ENUM ('DRAFT', 'SUBMITTED', 'LATE', 'RETURNED', 'GRADED');
+        END IF;
+      END$$;`,
+      `CREATE TABLE IF NOT EXISTS assignments (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        class_id UUID NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+        lesson_id UUID REFERENCES lessons(id),
+        title VARCHAR(255) NOT NULL,
+        instructions TEXT NOT NULL,
+        total_marks NUMERIC(8,2) NOT NULL,
+        due_at TIMESTAMPTZ,
+        allow_late_submission BOOLEAN NOT NULL DEFAULT TRUE,
+        max_attempts INTEGER NOT NULL DEFAULT 1,
+        status assignment_status NOT NULL DEFAULT 'DRAFT',
+        created_by UUID NOT NULL REFERENCES users(id),
+        published_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        resources TEXT,
+        CHECK (total_marks > 0),
+        CHECK (max_attempts > 0)
+      );`,
+      `ALTER TABLE assignments ADD COLUMN IF NOT EXISTS resources TEXT;`,
+      `CREATE TABLE IF NOT EXISTS assignment_submissions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        assignment_id UUID NOT NULL REFERENCES assignments(id) ON DELETE CASCADE,
+        student_id UUID NOT NULL REFERENCES users(id),
+        attempt_number INTEGER NOT NULL,
+        text_content TEXT,
+        status submission_status NOT NULL DEFAULT 'DRAFT',
+        submitted_at TIMESTAMPTZ,
+        score NUMERIC(8,2),
+        feedback TEXT,
+        graded_by UUID REFERENCES users(id),
+        graded_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE(assignment_id, student_id, attempt_number),
+        CHECK (attempt_number > 0),
+        CHECK (score IS NULL OR score >= 0)
+      );`,
+      `CREATE TABLE IF NOT EXISTS submission_files (
+        submission_id UUID NOT NULL REFERENCES assignment_submissions(id) ON DELETE CASCADE,
+        file_id UUID NOT NULL REFERENCES files(id),
+        PRIMARY KEY(submission_id, file_id)
+      );`
+    ]
+  },
+  {
+    id: "015_feedback_support_and_notifications",
+    queries: [
+      `CREATE TABLE IF NOT EXISTS feedback_campaigns (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        class_id UUID NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+        title VARCHAR(255) NOT NULL,
+        opens_at TIMESTAMPTZ NOT NULL,
+        closes_at TIMESTAMPTZ NOT NULL,
+        anonymous BOOLEAN NOT NULL DEFAULT FALSE,
+        one_response_per_student BOOLEAN NOT NULL DEFAULT TRUE,
+        created_by UUID NOT NULL REFERENCES users(id),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        CHECK (closes_at > opens_at)
+      );`,
+      `CREATE TABLE IF NOT EXISTS feedback_responses (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        campaign_id UUID NOT NULL REFERENCES feedback_campaigns(id) ON DELETE CASCADE,
+        student_id UUID REFERENCES users(id),
+        pace INTEGER,
+        clarity INTEGER,
+        confidence INTEGER,
+        materials_rating INTEGER,
+        lab_rating INTEGER,
+        had_issue BOOLEAN NOT NULL DEFAULT FALSE,
+        issue_severity VARCHAR(30),
+        comments TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE(campaign_id, student_id)
+      );`,
+      `CREATE TABLE IF NOT EXISTS feedback_participation (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        campaign_id UUID NOT NULL REFERENCES feedback_campaigns(id) ON DELETE CASCADE,
+        student_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE(campaign_id, student_id)
+      );`,
+      `DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'support_case_status') THEN
+          CREATE TYPE support_case_status AS ENUM ('OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED');
+        END IF;
+      END$$;`,
+      `CREATE TABLE IF NOT EXISTS support_cases (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        student_id UUID REFERENCES users(id),
+        class_id UUID REFERENCES classes(id),
+        source_feedback_id UUID REFERENCES feedback_responses(id),
+        category VARCHAR(100),
+        severity VARCHAR(30) NOT NULL,
+        subject VARCHAR(255) NOT NULL,
+        description TEXT NOT NULL,
+        status support_case_status NOT NULL DEFAULT 'OPEN'::support_case_status,
+        assigned_to UUID REFERENCES users(id),
+        resolution_note TEXT,
+        resolved_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );`,
+      `CREATE TABLE IF NOT EXISTS notifications (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        type VARCHAR(100) NOT NULL,
+        title VARCHAR(255) NOT NULL,
+        message TEXT NOT NULL,
+        action_url TEXT,
+        read_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );`
+    ]
   }
 ];
 

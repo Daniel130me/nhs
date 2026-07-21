@@ -9,6 +9,7 @@ import { ClassRepository } from "../../repositories/class.repository";
 import { CourseRepository } from "../../repositories/course.repository";
 import { BadRequestError, NotFoundError } from "../../utils/errors";
 import { z } from "zod";
+import { createNotification } from "../../services/notification.service";
 
 const router = Router();
 
@@ -308,6 +309,21 @@ router.post("/:classId/sessions", requireClassInstructor("classId"), asyncHandle
       req.user!.id
     ]
   );
+  // Notify all enrolled students in the class
+  const students = await query<any>(
+    "SELECT student_id FROM enrolments WHERE class_id = $1 AND status = 'ACTIVE'",
+    [classId]
+  );
+  for (const s of students) {
+    await createNotification(
+      s.student_id,
+      "UPCOMING_SESSION",
+      "New Session Scheduled",
+      `A new session "${body.title}" has been scheduled for your class.`,
+      `/student/classes`
+    );
+  }
+
   return sendSuccess(res, result[0], "Session created successfully", 201);
 }));
 

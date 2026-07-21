@@ -46,6 +46,8 @@ import InstructorDashboardView from './instructor/InstructorDashboardView';
 import ClassSessionsView from './instructor/ClassSessionsView';
 import ClassAttendanceView from './instructor/ClassAttendanceView';
 import ClassWeeklyLogsView from './instructor/ClassWeeklyLogsView';
+import InstructorAssignmentsView from './instructor/InstructorAssignmentsView';
+import InstructorGradebookView from './instructor/InstructorGradebookView';
 
 interface InstructorPortalProps {
   config: SystemConfig;
@@ -1405,64 +1407,32 @@ export default function InstructorPortal({
           })()}
 
           {/* PATH: /instructor/assignments */}
-          {section === 'assignments' && (
+          {section === 'assignments' && currentInstructor && (
             <motion.div
               key="route-assignments"
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4"
             >
-              <h3 className="font-black text-slate-900 text-sm uppercase tracking-wider border-b border-slate-100 pb-3">LMS Assignment Tracker</h3>
-              <p className="text-xs text-slate-400">Class Assignments and practical exam configurations are locked into standard courses syllabi. Review student project submissions here.</p>
-              
-              <div className="p-12 text-center text-slate-300 flex flex-col items-center justify-center space-y-2">
-                <FileText className="w-12 h-12" />
-                <span className="text-xs font-bold text-slate-700">Assignments Workspace</span>
-                <p className="text-[10px] text-slate-400 max-w-xs">All projects, lab completions, and exams are calculated inside our dynamic grading engine.</p>
-              </div>
+              <InstructorAssignmentsView 
+                currentInstructor={currentInstructor}
+                classes={classes}
+              />
             </motion.div>
           )}
 
           {/* PATH: /instructor/gradebook */}
-          {section === 'gradebook' && (
+          {section === 'gradebook' && currentInstructor && (
             <motion.div
               key="route-gradebook"
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4"
             >
-              <h3 className="font-black text-slate-900 text-sm uppercase tracking-wider border-b border-slate-100 pb-3">Unified Student Gradebook</h3>
-              <p className="text-xs text-slate-400">Review student performance logs, exam scores, and practical assignment feedback profiles.</p>
-              
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="bg-slate-900 text-white font-bold text-[10px] uppercase tracking-wider">
-                      <th className="p-4">Student</th>
-                      <th className="p-4">Assigned Course</th>
-                      <th className="p-4">Exam Trail Score</th>
-                      <th className="p-4">Final Grade</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 text-slate-700">
-                     {dbStudents.map((s, idx) => (
-                      <tr key={s.id} className="hover:bg-slate-50">
-                        <td className="p-4">
-                          <span className="font-bold text-slate-900 block">{s.firstName} {s.lastName}</span>
-                          <span className="text-[9px] text-slate-400 block">{s.email}</span>
-                        </td>
-                        <td className="p-4 font-semibold">{classes[0]?.courseName || 'N/A'}</td>
-                        <td className="p-4 font-bold text-red-500">82%</td>
-                        <td className="p-4">
-                          <span className="px-2 py-0.5 bg-emerald-50 text-emerald-800 font-bold rounded-full">Passed</span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <InstructorGradebookView 
+                currentInstructor={currentInstructor}
+                classes={classes}
+              />
             </motion.div>
           )}
 

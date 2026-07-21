@@ -5,6 +5,7 @@ import { sendSuccess } from "../../utils/api-response";
 import { requireActiveUser } from "../../middleware/auth";
 import { BadRequestError, NotFoundError, ForbiddenError } from "../../utils/errors";
 import { z } from "zod";
+import { createNotification } from "../../services/notification.service";
 
 const router = Router();
 
@@ -270,6 +271,33 @@ router.put("/:id/review", requireActiveUser, asyncHandler(async (req, res) => {
   
   if (result.length === 0) {
     throw new NotFoundError("Weekly log not found");
+  }
+
+  // Fetch log details to notify instructor
+  const logInfo = await query<any>(
+    "SELECT instructor_id, week_start FROM weekly_logs_new WHERE id = $1",
+    [id]
+  );
+  if (logInfo.length > 0) {
+    const instrId = logInfo[0].instructor_id;
+    const weekStart = logInfo[0].week_start;
+    if (status === 'RETURNED') {
+      await createNotification(
+        instrId,
+        "WEEKLY_LOG_RETURNED",
+        "Weekly Log Returned",
+        `Your weekly log for week starting ${weekStart} has been returned for revisions. Comment: ${reviewComment || "No comment."}`,
+        `/instructor/logs`
+      );
+    } else if (status === 'APPROVED') {
+      await createNotification(
+        instrId,
+        "WEEKLY_LOG_APPROVED",
+        "Weekly Log Approved",
+        `Your weekly log for week starting ${weekStart} has been approved.`,
+        `/instructor/logs`
+      );
+    }
   }
   
   return sendSuccess(res, result[0], `Weekly log successfully reviewed as ${status}`);

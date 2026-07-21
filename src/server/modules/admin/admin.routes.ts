@@ -10,6 +10,7 @@ import { createStudentSchema, importStudentsSchema, enrolmentSchema } from "./ad
 import crypto from "crypto";
 import argon2 from "argon2";
 import { emailService } from "../../services/email.service";
+import { createNotification } from "../../services/notification.service";
 
 const router = Router();
 
@@ -200,6 +201,16 @@ router.patch(
     const legacyStatus = newStatus === "ACTIVE" ? "Active" : "Deactivated";
     await query("UPDATE instructors SET status = $1 WHERE id = $2", [legacyStatus, id]);
 
+    if (newStatus === "ACTIVE") {
+      await createNotification(
+        id,
+        "ACCOUNT_APPROVAL",
+        "Account Approved",
+        "Your account has been approved and activated. You now have full access.",
+        "/instructor-dashboard"
+      );
+    }
+
     // Handle session invalidation if suspended or rejected
     if (newStatus === "SUSPENDED" || newStatus === "REJECTED") {
       await query(`DELETE FROM "session" WHERE sess::text LIKE $1`, [`%"userId":"${id}"%`]);
@@ -240,6 +251,14 @@ router.post(
     // Update to ACTIVE
     await query("UPDATE users SET status = 'ACTIVE', updated_at = NOW() WHERE id = $1", [id]);
     await query("UPDATE instructors SET status = 'Active' WHERE id = $1", [id]);
+
+    await createNotification(
+      id,
+      "ACCOUNT_APPROVAL",
+      "Account Approved",
+      "Your instructor account has been approved by the administrator. You can now log in and access your workspace.",
+      "/instructor-dashboard"
+    );
 
     // Audit log
     await logAudit({
@@ -638,6 +657,14 @@ router.post(
     );
 
     await emailService.sendClassEnrolment(student.email, student.first_name, cls.name);
+
+    await createNotification(
+      studentId,
+      "CLASS_ENROLMENT",
+      "Enrolled in Class",
+      `You have been enrolled in the class "${cls.name}".`,
+      `/student/classes`
+    );
 
     await logAudit({
       req,

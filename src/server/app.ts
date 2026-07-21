@@ -23,6 +23,7 @@ import configRouter from "./modules/config/config.routes";
 import assessmentsRouter from "./modules/assessments/assessments.routes";
 import filesRouter from "./modules/files/files.routes";
 import adminRouter from "./modules/admin/admin.routes";
+import feedbackSupportRouter from "./modules/feedback-support/feedback-support.routes";
 
 const app = express();
 
@@ -104,6 +105,7 @@ app.use("/api/logs", weeklyLogsRouter);
 app.use("/api/surveys", surveysRouter);
 app.use("/api/courses", coursesRouter);
 app.use("/api/config", configRouter);
+app.use("/api", feedbackSupportRouter);
 
 // Routes nested at top-level /api (like /api/exam-attempts, /api/gemini/*, /api/upload)
 app.use("/api", assessmentsRouter);

@@ -27,7 +27,7 @@ export interface Instructor {
   gender: string;
   center: string;
   courses: string[];
-  role: 'Instructor' | 'Admin';
+  role: 'Instructor' | 'Admin' | 'Student';
   status?: 'Active' | 'Deactivated';
   createdAt: string;
 }
