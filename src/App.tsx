@@ -97,6 +97,7 @@ export default function App() {
   // ---- SESSION EXPIRED HANDLER ----
   useEffect(() => {
     const handleExpired = () => {
+      localStorage.removeItem("nhs_token");
       setCurrentInstructor(null);
       alert("Your session has expired. Please log in again.");
     };
@@ -149,6 +150,14 @@ export default function App() {
       }
       const resData = await response.json();
       const user = resData.data || resData;
+      
+      // Save Bearer Token if returned in response
+      if (resData.token) {
+        localStorage.setItem("nhs_token", resData.token);
+      } else if (user.token) {
+        localStorage.setItem("nhs_token", user.token);
+      }
+
       const mapped: Instructor = {
         id: user.id,
         firstName: user.firstName,
@@ -185,6 +194,7 @@ export default function App() {
     } catch (err) {
       console.error("Logout endpoint failure:", err);
     } finally {
+      localStorage.removeItem("nhs_token");
       setCurrentInstructor(null);
     }
   };

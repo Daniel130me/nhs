@@ -18,6 +18,7 @@ import { BadRequestError, UnauthorizedError, NotFoundError } from "../../utils/e
 import { logger } from "../../utils/logger";
 import rateLimit from "express-rate-limit";
 import { requireActiveUser } from "../../middleware/auth";
+import { generateToken } from "../../utils/token";
 
 const router = Router();
 
@@ -292,6 +293,7 @@ router.post(
           return next(saveErr);
         }
 
+        const token = generateToken({ userId: user.id, role: user.role });
         return sendSuccess(
           res,
           {
@@ -304,6 +306,7 @@ router.post(
             center: user.center,
             courses: user.courses,
             createdAt: user.created_at,
+            token,
           },
           "Login successful"
         );

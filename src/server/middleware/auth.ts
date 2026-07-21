@@ -3,6 +3,22 @@ import { query } from "../config/database";
 import { UnauthorizedError, ForbiddenError, BadRequestError, NotFoundError } from "../utils/errors";
 import { asyncHandler } from "../utils/async-handler";
 import { UserRole } from "../../types";
+import { verifyToken } from "../utils/token";
+
+export const bearerTokenMiddleware = (req: Request, res: Response, next: NextFunction) => {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    const token = authHeader.substring(7);
+    const decoded = verifyToken(token);
+    if (decoded) {
+      if (!req.session) {
+        req.session = {} as any;
+      }
+      req.session.userId = decoded.userId;
+    }
+  }
+  next();
+};
 
 export const requireAuth = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
   if (!req.session || !req.session.userId) {

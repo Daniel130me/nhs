@@ -13,6 +13,24 @@ Object.defineProperty(window, 'fetch', {
     if (urlString.startsWith('/') || urlString.startsWith(window.location.origin)) {
       newInit.credentials = 'include';
     }
+
+    // Inject Bearer token if present
+    const token = localStorage.getItem("nhs_token");
+    if (token && (urlString.startsWith('/api') || urlString.includes('/api/'))) {
+      let headers: Headers;
+      if (newInit.headers instanceof Headers) {
+        headers = newInit.headers;
+      } else if (Array.isArray(newInit.headers)) {
+        headers = new Headers(newInit.headers);
+      } else {
+        headers = new Headers(newInit.headers || {});
+      }
+      if (!headers.has("Authorization")) {
+        headers.set("Authorization", `Bearer ${token}`);
+      }
+      newInit.headers = headers;
+    }
+
     const response = await originalFetch(input, newInit);
     if (response.status === 401 && !urlString.includes("/auth/me") && !urlString.includes("/auth/login")) {
       window.dispatchEvent(new CustomEvent("nhs-session-expired"));

@@ -944,5 +944,25 @@ async function seedDatabase(): Promise<void> {
     }
   }
 
+  // Seed a default active student if none exists in users table
+  const studentCount = await query("SELECT COUNT(*) FROM users WHERE role = 'STUDENT'");
+  if (parseInt(studentCount[0].count) === 0) {
+    logger.info("[Seed] Seeding default active student user...");
+    const studentId = "00000000-0000-0000-0000-000000000005";
+    await query(
+      `INSERT INTO users (id, first_name, last_name, email, password_hash, role, status, gender, center, is_password_migrated)
+       VALUES ($1, $2, $3, $4, $5, 'STUDENT', 'ACTIVE', 'Male', 'Ikeja', FALSE)
+       ON CONFLICT (id) DO NOTHING`,
+      [studentId, "Adebayo", "Tunde", "student@newhorizons.com", "password123"]
+    );
+    // Also insert into student_profiles
+    await query(
+      `INSERT INTO student_profiles (user_id, student_number, phone, admission_date)
+       VALUES ($1, 'NHS-STU-888999', '2348012345678', NOW())
+       ON CONFLICT (user_id) DO NOTHING`,
+      [studentId]
+    );
+  }
+
   logger.info("[Seed] Database seeding check completed successfully.");
 }

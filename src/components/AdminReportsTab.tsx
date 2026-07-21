@@ -631,7 +631,7 @@ export default function AdminReportsTab({ config, classes }: AdminReportsTabProp
                   </thead>
                   <tbody className="divide-y divide-slate-100 font-medium">
                     {data.map((row, idx) => (
-                      <tr key={row.id || idx} className="hover:bg-slate-50/50">
+                      <tr key={row.id ? `${activeReport}-${row.id}-${idx}` : `${activeReport}-${idx}`} className="hover:bg-slate-50/50">
                         {activeReport === 'enrolments' && (
                           <>
                             <td className="px-5 py-3.5">

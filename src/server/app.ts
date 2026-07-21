@@ -74,10 +74,13 @@ app.use(session({
   cookie: {
     httpOnly: true,
     secure: true, // true since AI Studio runs fully on HTTPS
-    sameSite: "lax",
+    sameSite: "none",
     maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
   }
 }));
+
+import { bearerTokenMiddleware } from "./middleware/auth";
+app.use(bearerTokenMiddleware);
 
 // 2. Serve static upload assets locally if required
 app.use("/uploads", express.static(path.join(process.cwd(), "public", "uploads")));
