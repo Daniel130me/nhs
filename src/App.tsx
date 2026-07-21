@@ -26,6 +26,40 @@ export default function App() {
   // Main UI Tab Router: 'Student' or 'Portal'
   const [mainTab, setMainTab] = useState<'Student' | 'Portal'>('Student');
 
+  // ---- PUBLIC CERTIFICATE VERIFICATION STATES ----
+  const [urlVerificationCode, setUrlVerificationCode] = useState<string | null>(null);
+  const [publicVerifyResult, setPublicVerifyResult] = useState<any | null>(null);
+  const [publicVerifyLoading, setPublicVerifyLoading] = useState(false);
+  const [publicVerifyError, setPublicVerifyError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('verify');
+    if (code) {
+      setUrlVerificationCode(code);
+      const verifyCode = async () => {
+        setPublicVerifyLoading(true);
+        setPublicVerifyError(null);
+        setPublicVerifyResult(null);
+        try {
+          const res = await fetch(`/api/certificates/verify/${encodeURIComponent(code)}`);
+          const result = await res.json();
+          if (result.success) {
+            setPublicVerifyResult(result.data);
+          } else {
+            throw new Error(result.error || 'Verification code not found.');
+          }
+        } catch (err: any) {
+          setPublicVerifyError(err.message || 'Verification check failed.');
+        } finally {
+          setUrlVerificationCode(code);
+          setPublicVerifyLoading(false);
+        }
+      };
+      verifyCode();
+    }
+  }, []);
+
   // ---- PORTAL AUTHENTICATION RE-HYDRATION ----
   useEffect(() => {
     async function checkSession() {
@@ -763,6 +797,105 @@ export default function App() {
           </AnimatePresence>
         )}
       </main>
+
+      {/* PUBLIC VERIFICATION DIALOG */}
+      <AnimatePresence>
+        {urlVerificationCode && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+            <div 
+              className="absolute inset-0 bg-slate-950/60 backdrop-blur-md" 
+              onClick={() => {
+                setUrlVerificationCode(null);
+                window.history.replaceState({}, document.title, window.location.pathname);
+              }} 
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="relative bg-white max-w-lg w-full rounded-3xl p-8 shadow-2xl border border-slate-100 z-10 text-center space-y-6 overflow-hidden"
+            >
+              <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-red-500 via-emerald-500 to-blue-500" />
+              
+              <div className="mx-auto w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center">
+                <ShieldCheck className="w-8 h-8" />
+              </div>
+
+              <div className="space-y-1.5">
+                <h3 className="font-display font-black text-slate-900 text-lg">
+                  NHS Secure Credential Ledger
+                </h3>
+                <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">
+                  Verification Code: {urlVerificationCode}
+                </p>
+              </div>
+
+              {publicVerifyLoading ? (
+                <div className="py-8 flex flex-col items-center justify-center space-y-3">
+                  <Loader2 className="w-8 h-8 text-red-500 animate-spin" />
+                  <p className="text-xs text-slate-500 font-bold">Querying secure verification database...</p>
+                </div>
+              ) : publicVerifyError ? (
+                <div className="p-4 bg-rose-50 border border-rose-100 rounded-2xl text-rose-800 text-xs text-left space-y-1">
+                  <p className="font-extrabold">Verification Unsuccessful</p>
+                  <p className="font-medium text-rose-600 leading-relaxed">
+                    {publicVerifyError}. Please check the verification link or code correctness.
+                  </p>
+                </div>
+              ) : publicVerifyResult ? (
+                <div className="space-y-4">
+                  <div className={`p-4 rounded-2xl border text-left ${publicVerifyResult.revoked ? 'bg-red-50 border-red-200 text-red-800' : 'bg-emerald-50/70 border-emerald-100 text-emerald-900'}`}>
+                    <div className="flex justify-between items-center mb-3">
+                      <span className="text-[11px] font-extrabold uppercase tracking-wide">
+                        {publicVerifyResult.revoked ? '❌ Revoked Credential' : '✅ Verified Credential'}
+                      </span>
+                      <span className="text-[10px] font-mono font-bold">
+                        {publicVerifyResult.certificateNumber}
+                      </span>
+                    </div>
+                    
+                    <div className="space-y-2 text-xs font-medium">
+                      <p>
+                        Student: <strong className="font-extrabold text-slate-900">{publicVerifyResult.studentName}</strong>
+                      </p>
+                      <p>
+                        Course/Class: <strong className="font-extrabold text-slate-900">{publicVerifyResult.className}</strong>
+                      </p>
+                      <p>
+                        Issued On: <strong className="font-extrabold text-slate-900">{new Date(publicVerifyResult.issuedAt).toLocaleDateString()}</strong>
+                      </p>
+                      {publicVerifyResult.revoked && (
+                        <div className="mt-2 pt-2 border-t border-red-200 text-[10px] text-red-700 italic">
+                          Revocation Reason: "{publicVerifyResult.revocationReason}"
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {!publicVerifyResult.revoked && (
+                    <p className="text-[11px] text-slate-400 font-semibold leading-relaxed">
+                      This digital credential is certified genuine and registered permanently within the New Horizons learning management matrix.
+                    </p>
+                  )}
+                </div>
+              ) : null}
+
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUrlVerificationCode(null);
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                  }}
+                  className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
+                >
+                  Dismiss Verification View
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* OPERATIONS FOOTER */}
       <footer className="bg-white border-t border-slate-200 py-6 px-6 shrink-0 text-center text-xs text-slate-400">

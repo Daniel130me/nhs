@@ -286,10 +286,19 @@ export async function runDataMigration(): Promise<MigrationReport> {
                 [versionUuid, modName]
               );
               if (modExists.length === 0) {
+                // Determine next position to avoid duplicate key conflicts
+                const maxPosRes = await query<any>(
+                  "SELECT MAX(position) as max_pos FROM course_modules WHERE course_version_id = $1",
+                  [versionUuid]
+                );
+                const nextPos = (maxPosRes[0]?.max_pos !== null && maxPosRes[0]?.max_pos !== undefined)
+                  ? parseInt(maxPosRes[0].max_pos) + 1
+                  : 1;
+
                 await query(
                   `INSERT INTO course_modules (course_version_id, title, description, position, estimated_minutes)
                    VALUES ($1, $2, $3, $4, $5)`,
-                  [versionUuid, modName, `Syllabus unit: ${modName}`, pos, 120]
+                  [versionUuid, modName, `Syllabus unit: ${modName}`, nextPos, 120]
                 );
                 report.courseModulesCreated++;
               }

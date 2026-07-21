@@ -84,16 +84,40 @@ export default function StudentPortal({ currentStudent, onLogout }: StudentPorta
   const [gradebook, setGradebook] = useState<Gradebook | null>(null);
 
   // Top-level Student Navigation Tabs
-  const [activeTab, setActiveTab] = useState<'classes' | 'campaigns' | 'support' | 'notifications'>('classes');
+  const [activeTab, setActiveTab] = useState<'classes' | 'campaigns' | 'support' | 'notifications' | 'certificates'>('classes');
 
   // Backend Integration States
   const [notifications, setNotifications] = useState<any[]>([]);
   const [campaigns, setCampaigns] = useState<any[]>([]);
   const [supportCases, setSupportCases] = useState<any[]>([]);
+  const [certificates, setCertificates] = useState<any[]>([]);
 
   const [loadingCampaigns, setLoadingCampaigns] = useState(false);
   const [loadingSupport, setLoadingSupport] = useState(false);
   const [loadingNotifications, setLoadingNotifications] = useState(false);
+  const [loadingCertificates, setLoadingCertificates] = useState(false);
+
+  useEffect(() => {
+    if (activeTab === 'certificates') {
+      const loadCertificates = async () => {
+        setLoadingCertificates(true);
+        try {
+          const res = await fetch("/api/certificates/my-certificates");
+          if (res.ok) {
+            const result = await res.json();
+            if (result.success) {
+              setCertificates(result.data);
+            }
+          }
+        } catch (err) {
+          console.error("Failed to load student certificates", err);
+        } finally {
+          setLoadingCertificates(false);
+        }
+      };
+      loadCertificates();
+    }
+  }, [activeTab]);
 
   // Active Campaign Survey Filler state
   const [activeCampaign, setActiveCampaign] = useState<any | null>(null);
@@ -604,6 +628,15 @@ export default function StudentPortal({ currentStudent, onLogout }: StudentPorta
                 {notifications.filter(n => !n.isRead).length}
               </span>
             )}
+          </button>
+          <button
+            onClick={() => { setActiveTab('certificates'); }}
+            className={`pb-3 text-xs font-bold border-b-2 transition-all cursor-pointer flex items-center gap-2 px-1 ${
+              activeTab === 'certificates' ? 'border-red-500 text-red-600 font-extrabold' : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <Award className="w-4 h-4" />
+            My Certificates
           </button>
         </div>
       </div>
@@ -1722,6 +1755,55 @@ export default function StudentPortal({ currentStudent, onLogout }: StudentPorta
                     </div>
                   );
                 })}
+              </div>
+            )}
+          </div>
+        ) : activeTab === 'certificates' ? (
+          /* CERTIFICATES WORKSPACE */
+          <div className="space-y-6">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 tracking-wide">My Academic Certificates</h3>
+              <p className="text-xs text-slate-500 mt-0.5">View and download your verified certificates of course completion.</p>
+            </div>
+
+            {loadingCertificates ? (
+              <div className="flex justify-center py-16">
+                <Loader2 className="w-8 h-8 text-red-500 animate-spin" />
+              </div>
+            ) : certificates.length === 0 ? (
+              <div className="bg-white border border-slate-200 rounded-2xl p-10 text-center">
+                <Award className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+                <h4 className="font-bold text-slate-700 text-sm">No Certificates Issued Yet</h4>
+                <p className="text-xs text-slate-400 mt-1">
+                  Certificates are automatically evaluated and issued once you complete 80% attendance and achieve passing scores on all published assignments.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {certificates.map(cert => (
+                  <div key={cert.id} className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4 relative overflow-hidden">
+                    <div className="absolute right-0 top-0 w-16 h-16 bg-emerald-500/10 rounded-bl-full flex items-center justify-center">
+                      <Award className="w-6 h-6 text-emerald-600 -translate-y-1 translate-x-1" />
+                    </div>
+                    <div>
+                      <span className="text-[9px] text-emerald-600 font-extrabold uppercase tracking-wider block">Completed</span>
+                      <h4 className="font-display font-extrabold text-slate-900 text-sm mt-1">{cert.className}</h4>
+                      <p className="text-[10px] text-slate-400 mt-0.5">Issued on {new Date(cert.issuedAt).toLocaleDateString()}</p>
+                    </div>
+                    <div className="bg-slate-50 p-3 rounded-lg space-y-1 font-mono text-[10px] text-slate-500">
+                      <div>Cert ID: <strong className="text-slate-800">{cert.certificateNumber}</strong></div>
+                      <div>Verification Code: <strong className="text-slate-800">{cert.verificationCode}</strong></div>
+                    </div>
+                    <div className="pt-2">
+                      <a
+                        href={`/?verify=${cert.verificationCode}`}
+                        className="inline-flex items-center gap-1 text-[11px] font-bold text-red-600 hover:text-red-700"
+                      >
+                        Verify Credential Entry &rarr;
+                      </a>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>

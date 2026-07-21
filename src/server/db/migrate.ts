@@ -638,6 +638,43 @@ const MIGRATIONS: Migration[] = [
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );`
     ]
+  },
+  {
+    id: "016_certificates_and_reporting",
+    queries: [
+      `CREATE TABLE IF NOT EXISTS certificates (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        student_id UUID NOT NULL REFERENCES users(id),
+        class_id UUID NOT NULL REFERENCES classes(id),
+        certificate_number VARCHAR(100) NOT NULL UNIQUE,
+        verification_code VARCHAR(100) NOT NULL UNIQUE,
+        issued_by UUID REFERENCES users(id),
+        file_id UUID REFERENCES files(id),
+        issued_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        revoked BOOLEAN NOT NULL DEFAULT FALSE,
+        revoked_at TIMESTAMPTZ,
+        revoked_by UUID REFERENCES users(id),
+        revocation_reason TEXT,
+        UNIQUE (student_id, class_id)
+      );`,
+      `CREATE TABLE IF NOT EXISTS lesson_completions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        student_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        lesson_id UUID NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
+        completed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE(student_id, lesson_id)
+      );`,
+      `CREATE INDEX IF NOT EXISTS enrolments_class_id_idx ON enrolments(class_id);`,
+      `CREATE INDEX IF NOT EXISTS enrolments_student_id_idx ON enrolments(student_id);`,
+      `CREATE INDEX IF NOT EXISTS attendance_records_session_id_idx ON attendance_records(session_id);`,
+      `CREATE INDEX IF NOT EXISTS attendance_records_student_id_idx ON attendance_records(student_id);`,
+      `CREATE INDEX IF NOT EXISTS assignment_submissions_assignment_id_idx ON assignment_submissions(assignment_id);`,
+      `CREATE INDEX IF NOT EXISTS assignment_submissions_student_id_idx ON assignment_submissions(student_id);`,
+      `CREATE INDEX IF NOT EXISTS feedback_responses_campaign_id_idx ON feedback_responses(campaign_id);`,
+      `CREATE INDEX IF NOT EXISTS class_sessions_class_id_idx ON class_sessions(class_id);`,
+      `CREATE INDEX IF NOT EXISTS certificates_student_id_idx ON certificates(student_id);`,
+      `CREATE INDEX IF NOT EXISTS certificates_class_id_idx ON certificates(class_id);`
+    ]
   }
 ];
 

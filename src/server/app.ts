@@ -24,6 +24,8 @@ import assessmentsRouter from "./modules/assessments/assessments.routes";
 import filesRouter from "./modules/files/files.routes";
 import adminRouter from "./modules/admin/admin.routes";
 import feedbackSupportRouter from "./modules/feedback-support/feedback-support.routes";
+import reportsRouter from "./modules/admin/reports.routes";
+import certificatesRouter from "./modules/certificates/certificates.routes";
 
 const app = express();
 
@@ -96,6 +98,8 @@ app.get("/api/ready", async (req, res) => {
 });
 
 // 4. Mount API Routes
+app.use("/api/v1/admin/reports", reportsRouter);
+app.use("/api/certificates", certificatesRouter);
 app.use("/api/v1/admin", adminRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/v1/auth", authRouter);

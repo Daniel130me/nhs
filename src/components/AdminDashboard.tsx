@@ -36,6 +36,7 @@ import {
 } from 'lucide-react';
 import { Instructor, Class, WeeklyLog, StudentSurvey, SystemConfig, Course, Lesson, Resource, ExamAttempt } from '../types';
 import FileUploader from './FileUploader';
+import AdminReportsTab from './AdminReportsTab';
 
 interface AdminDashboardProps {
   config: SystemConfig;
@@ -85,7 +86,7 @@ export default function AdminDashboard({
   const [severityFilter, setSeverityFilter] = useState('All');
 
   // Sub-tabs for the Admin portal
-  const [adminTab, setAdminTab] = useState<'Analytics' | 'Instructors' | 'Surveys' | 'InstructorLogs' | 'Config'>('Analytics');
+  const [adminTab, setAdminTab] = useState<'Analytics' | 'Instructors' | 'Surveys' | 'InstructorLogs' | 'Config' | 'Reports'>('Analytics');
 
   // Real-time instructors fetching states
   const [dbInstructors, setDbInstructors] = useState<any[]>([]);
@@ -756,6 +757,7 @@ export default function AdminDashboard({
             { id: 'Instructors', label: 'Instructors' },
             { id: 'Surveys', label: `Student Pulse (${surveys.length})` },
             { id: 'InstructorLogs', label: 'Instructor Logs' },
+            { id: 'Reports', label: 'Reports & Certificates' },
             { id: 'Config', label: 'Operations Hub' }
           ].map((tab) => (
             <button
@@ -1728,6 +1730,18 @@ export default function AdminDashboard({
                 </div>
               )}
             </div>
+          </motion.div>
+        )}
+
+        {/* REPORTS & CERTIFICATES TAB */}
+        {adminTab === 'Reports' && (
+          <motion.div
+            key="reports-tab"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+          >
+            <AdminReportsTab config={config} classes={classes} />
           </motion.div>
         )}
 
