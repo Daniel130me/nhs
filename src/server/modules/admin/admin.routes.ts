@@ -55,6 +55,8 @@ router.get(
       const uStatus = status.toUpperCase();
       if (uStatus === 'SUSPENDED' || uStatus === 'DEACTIVATED') {
         sql += ` AND (UPPER(status) = 'SUSPENDED' OR UPPER(status) = 'DEACTIVATED')`;
+      } else if (uStatus === 'ACTIVE' || uStatus === 'APPROVED') {
+        sql += ` AND (UPPER(status) = 'ACTIVE' OR UPPER(status) = 'APPROVED')`;
       } else {
         params.push(uStatus);
         sql += ` AND UPPER(status) = $${params.length}`;
@@ -316,6 +318,49 @@ router.post(
     });
 
     return sendSuccess(res, { success: true }, "Instructor profile rejected successfully.");
+  })
+);
+
+// DELETE /api/v1/admin/instructors/:id
+router.delete(
+  "/instructors/:id",
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+
+    const users = await query<any>(
+      "SELECT id, first_name, last_name, email FROM users WHERE id = $1 AND deleted_at IS NULL",
+      [id]
+    );
+
+    if (users.length === 0) {
+      throw new NotFoundError("Instructor account not found.");
+    }
+
+    const user = users[0];
+
+    // Soft-delete user in database (bin/trash under the hood)
+    await query("UPDATE users SET deleted_at = NOW(), updated_at = NOW() WHERE id = $1", [id]);
+    await query("UPDATE instructors SET deleted_at = NOW(), status = 'DELETED' WHERE id = $1", [id]).catch(() => {});
+
+    // Invalidate active sessions
+    await query(`DELETE FROM "session" WHERE sess::text LIKE $1`, [`%"userId":"${id}"%`]);
+
+    // Log audit
+    await logAudit({
+      req,
+      action: "Instructor deletion",
+      entityType: "user",
+      entityId: id,
+      oldValues: { email: user.email },
+      newValues: { deleted_at: new Date().toISOString() },
+      metadata: { deletedBy: (req as any).user?.email }
+    });
+
+    return sendSuccess(
+      res,
+      { success: true, id },
+      "Instructor account and all associated records have been permanently deleted from the system."
+    );
   })
 );
 

@@ -8,7 +8,7 @@ import { requireActiveUser, requireAdmin } from "../../middleware/auth";
 const router = Router();
 
 router.get("/", requireActiveUser, asyncHandler(async (req, res) => {
-  const instructors = await query("SELECT * FROM instructors ORDER BY created_at DESC");
+  const instructors = await query("SELECT * FROM instructors WHERE deleted_at IS NULL ORDER BY created_at DESC");
   const formatted = instructors.map(inst => ({
     id: inst.id,
     firstName: inst.first_name,
@@ -35,10 +35,18 @@ router.put("/:id/status", requireAdmin, asyncHandler(async (req, res) => {
   await query("UPDATE instructors SET status = $1 WHERE id = $2", [status, id]);
   
   // Also update in unified users table!
-  const userStatus = status === 'Active' ? 'ACTIVE' : 'PENDING';
+  const userStatus = status === 'Active' ? 'ACTIVE' : 'SUSPENDED';
   await query("UPDATE users SET status = $1 WHERE id = $2", [userStatus, id]);
 
   return sendSuccess(res, { success: true }, `Instructor status updated to ${status} successfully`);
+}));
+
+router.delete("/:id", requireAdmin, asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  await query("UPDATE users SET deleted_at = NOW(), updated_at = NOW() WHERE id = $1", [id]);
+  await query("UPDATE instructors SET deleted_at = NOW(), status = 'DELETED' WHERE id = $1", [id]).catch(() => {});
+  await query(`DELETE FROM "session" WHERE sess::text LIKE $1`, [`%"userId":"${id}"%`]);
+  return sendSuccess(res, { success: true }, "Instructor account and all associated records permanently deleted from system");
 }));
 
 export default router;

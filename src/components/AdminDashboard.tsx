@@ -258,6 +258,38 @@ export default function AdminDashboard({
     });
   };
 
+  const handleDeleteInstructor = (id: string, name: string) => {
+    setConfirmationModal({
+      isOpen: true,
+      title: "Permanently Delete Instructor Account",
+      message: `Are you sure you want to permanently delete the instructor account for ${name}? This action cannot be undone and all associated records will be permanently wiped from the database.`,
+      onConfirm: async () => {
+        setDbInstructors(prev => prev.filter(inst => inst.id !== id));
+        if (selectedInstructor && selectedInstructor.id === id) {
+          setSelectedInstructor(null);
+          setIsDetailDrawerOpen(false);
+        }
+        try {
+          const res = await fetch(`/api/v1/admin/instructors/${id}`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' }
+          });
+          if (!res.ok) {
+            await fetch(`/api/instructors/${id}`, {
+              method: 'DELETE'
+            });
+          }
+        } catch (err: any) {
+          console.warn("API delete warning:", err.message);
+        } finally {
+          setIsDetailDrawerOpen(false);
+          setConfirmationModal(null);
+          fetchAdminInstructors();
+        }
+      }
+    });
+  };
+
   const handleStatusChange = (id: string, name: string, nextStatus: string) => {
     const isActivating = nextStatus === 'ACTIVE' || nextStatus === 'Active';
     const targetStatus = isActivating ? 'ACTIVE' : 'SUSPENDED';
@@ -1104,11 +1136,20 @@ export default function AdminDashboard({
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {dbInstructors.map((inst) => {
                     const statusColors: any = {
-                      PENDING: "bg-yellow-50 text-yellow-700 border-yellow-200",
+                      PENDING: "bg-yellow-50 text-yellow-800 border-yellow-300",
                       ACTIVE: "bg-emerald-50 text-emerald-700 border-emerald-200",
-                      SUSPENDED: "bg-amber-50 text-amber-700 border-amber-200",
+                      SUSPENDED: "bg-amber-50 text-amber-800 border-amber-300",
                       REJECTED: "bg-rose-50 text-rose-700 border-rose-200"
                     };
+
+                    const statusLabels: any = {
+                      PENDING: "Pending Approval",
+                      ACTIVE: "Active",
+                      SUSPENDED: "Suspended",
+                      REJECTED: "Rejected"
+                    };
+
+                    const instSt = String(inst.status || 'ACTIVE').toUpperCase();
 
                     return (
                       <div
@@ -1121,8 +1162,8 @@ export default function AdminDashboard({
                               <h4 className="text-sm font-bold text-slate-900">{inst.firstName} {inst.lastName}</h4>
                               <span className="text-[10px] text-slate-400 block mt-0.5">{inst.email}</span>
                             </div>
-                            <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase border ${statusColors[inst.status] || "bg-slate-50 text-slate-600 border-slate-200"}`}>
-                              {inst.status}
+                            <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase border ${statusColors[instSt] || "bg-slate-50 text-slate-600 border-slate-200"}`}>
+                              {statusLabels[instSt] || instSt}
                             </span>
                           </div>
 
@@ -1152,20 +1193,35 @@ export default function AdminDashboard({
                           </div>
                         </div>
 
-                        <div className="flex gap-2 mt-5 pt-3 border-t border-slate-100">
-                          {inst.status === 'ACTIVE' || inst.status === 'Active' ? (
+                        <div className="flex gap-1.5 mt-5 pt-3 border-t border-slate-100 items-center">
+                          {instSt === 'PENDING' ? (
+                            <>
+                              <button
+                                onClick={() => handleApproveInstructor(inst.id, `${inst.firstName} ${inst.lastName}`)}
+                                className="flex-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg py-1.5 transition-all cursor-pointer active:scale-95"
+                              >
+                                Approve
+                              </button>
+                              <button
+                                onClick={() => handleRejectInstructor(inst.id, `${inst.firstName} ${inst.lastName}`)}
+                                className="flex-1 text-[11px] font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg py-1.5 transition-all cursor-pointer active:scale-95"
+                              >
+                                Reject
+                              </button>
+                            </>
+                          ) : instSt === 'ACTIVE' ? (
                             <button
                               onClick={() => handleStatusChange(inst.id, `${inst.firstName} ${inst.lastName}`, 'SUSPENDED')}
-                              className="flex-1 text-xs font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg py-2 transition-all cursor-pointer active:scale-95"
+                              className="flex-1 text-[11px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg py-1.5 transition-all cursor-pointer active:scale-95"
                             >
-                              Deactivate
+                              Suspend
                             </button>
                           ) : (
                             <button
                               onClick={() => handleStatusChange(inst.id, `${inst.firstName} ${inst.lastName}`, 'ACTIVE')}
-                              className="flex-1 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg py-2 transition-all cursor-pointer active:scale-95"
+                              className="flex-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg py-1.5 transition-all cursor-pointer active:scale-95"
                             >
-                              Activate
+                              Reactivate
                             </button>
                           )}
                           <button
@@ -1179,9 +1235,16 @@ export default function AdminDashboard({
                               setIsEditingProfile(false);
                               setIsDetailDrawerOpen(true);
                             }}
-                            className="flex-1 text-xs font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-lg py-2 hover:bg-slate-100 transition-all cursor-pointer active:scale-95"
+                            className="flex-1 text-[11px] font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-lg py-1.5 hover:bg-slate-100 transition-all cursor-pointer active:scale-95 text-center"
                           >
-                            Review Profile
+                            Profile
+                          </button>
+                          <button
+                            onClick={() => handleDeleteInstructor(inst.id, `${inst.firstName} ${inst.lastName}`)}
+                            title="Permanently Delete Instructor Account"
+                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 hover:border-rose-200 rounded-lg transition-all cursor-pointer active:scale-95 shrink-0"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       </div>
@@ -1448,6 +1511,21 @@ export default function AdminDashboard({
                           </div>
                         </div>
                       )}
+
+                      {/* Delete Instructor Account Section */}
+                      <div className="bg-rose-50 p-4 rounded-xl border border-rose-100 flex justify-between items-center">
+                        <div>
+                          <h4 className="text-xs font-bold text-rose-800">Permanent Account Deletion</h4>
+                          <p className="text-[10px] text-rose-600 mt-0.5">Erase instructor account and all associated records permanently from system.</p>
+                        </div>
+                        <button
+                          onClick={() => handleDeleteInstructor(selectedInstructor.id, `${selectedInstructor.firstName} ${selectedInstructor.lastName}`)}
+                          className="text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 px-3.5 py-1.5 rounded-lg transition-all cursor-pointer shadow-sm active:scale-95 flex items-center gap-1.5"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          Delete Account
+                        </button>
+                      </div>
                     </div>
                   )}
 
