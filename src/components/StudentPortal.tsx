@@ -570,7 +570,7 @@ export default function StudentPortal({ currentStudent, onLogout }: StudentPorta
             <h2 className="text-xl font-display font-extrabold text-slate-900 mt-1">
               Welcome, {currentStudent.firstName} {currentStudent.lastName}
             </h2>
-            <p className="text-xs text-slate-500 mt-0.5">{currentStudent.email} • Student ID: NHS-STU-ACTIVE</p>
+            <p className="text-xs text-slate-500 mt-0.5">{currentStudent.email} • Active Student</p>
           </div>
           <button
             onClick={onLogout}
@@ -1722,7 +1722,7 @@ export default function StudentPortal({ currentStudent, onLogout }: StudentPorta
                     >
                       <div className="flex flex-wrap justify-between items-start gap-2 border-b border-slate-50 pb-2.5">
                         <div className="space-y-0.5">
-                          <span className="text-[10px] text-slate-400 font-bold block">TICKET ID: {c.id.substring(0, 8).toUpperCase()}</span>
+                          <span className="text-[10px] text-slate-400 font-bold block">SUPPORT TICKET</span>
                           <h4 className="text-xs font-bold text-slate-900">{c.subject}</h4>
                         </div>
                         <div className="flex gap-2">

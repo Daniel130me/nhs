@@ -390,9 +390,9 @@ export default function StudentSurvey({ config, onSurveySubmit }: StudentSurveyP
                     exit={{ height: 0, opacity: 0 }}
                   >
                     <label className="block text-sm font-bold text-slate-800 mb-1">
-                      Student ID or Name
+                      Full Name
                     </label>
-                    <p className="text-xs text-slate-500 mb-2">Enter your name or ID. Leaving anonymous unchecked is highly appreciated so we can contact you to fix any issues!</p>
+                    <p className="text-xs text-slate-500 mb-2">Enter your name. Leaving anonymous unchecked is highly appreciated so we can contact you to fix any issues!</p>
                     <input
                       type="text"
                       value={formData.studentName}
@@ -440,12 +440,12 @@ export default function StudentSurvey({ config, onSurveySubmit }: StudentSurveyP
                         key={val}
                         type="button"
                         onClick={() => handlePillSelect('pace', val)}
-                        className={`py-3 px-2 border rounded-xl text-center text-xs transition-all ${
+                        className={`py-3 px-2 border rounded-xl text-center text-xs transition-all cursor-pointer active:scale-95 ${
                           formData.pace === val
-                            ? 'bg-slate-900 border-slate-900 text-white font-semibold'
+                            ? 'bg-slate-900 border-slate-900 text-white font-semibold shadow-xs'
                             : showErrors && !formData.pace
                             ? 'border-red-300 bg-red-50/10 text-slate-700 hover:bg-slate-50'
-                            : 'border-slate-200 text-slate-700 bg-white hover:bg-slate-50'
+                            : 'border-slate-200 text-slate-700 bg-white hover:bg-slate-50 hover:border-slate-400'
                         }`}
                       >
                         <span className="block font-bold text-sm mb-1">{val}</span>
@@ -469,12 +469,12 @@ export default function StudentSurvey({ config, onSurveySubmit }: StudentSurveyP
                         key={val}
                         type="button"
                         onClick={() => handlePillSelect('clarity', val)}
-                        className={`py-3 px-1 border rounded-xl text-center text-xs transition-all ${
+                        className={`py-3 px-1 border rounded-xl text-center text-xs transition-all cursor-pointer active:scale-95 ${
                           formData.clarity === val
-                            ? 'bg-slate-900 border-slate-900 text-white font-semibold'
+                            ? 'bg-slate-900 border-slate-900 text-white font-semibold shadow-xs'
                             : showErrors && !formData.clarity
                             ? 'border-red-300 bg-red-50/10 text-slate-700 hover:bg-slate-50'
-                            : 'border-slate-200 text-slate-700 bg-white hover:bg-slate-50'
+                            : 'border-slate-200 text-slate-700 bg-white hover:bg-slate-50 hover:border-slate-400'
                         }`}
                       >
                         <span className="block font-bold text-sm mb-1">{val}</span>
@@ -498,12 +498,12 @@ export default function StudentSurvey({ config, onSurveySubmit }: StudentSurveyP
                         key={val}
                         type="button"
                         onClick={() => handlePillSelect('keepUp', val)}
-                        className={`py-3 px-1 border rounded-xl text-center text-xs transition-all ${
+                        className={`py-3 px-1 border rounded-xl text-center text-xs transition-all cursor-pointer active:scale-95 ${
                           formData.keepUp === val
-                            ? 'bg-slate-900 border-slate-900 text-white font-semibold'
+                            ? 'bg-slate-900 border-slate-900 text-white font-semibold shadow-xs'
                             : showErrors && !formData.keepUp
                             ? 'border-red-300 bg-red-50/10 text-slate-700 hover:bg-slate-50'
-                            : 'border-slate-200 text-slate-700 bg-white hover:bg-slate-50'
+                            : 'border-slate-200 text-slate-700 bg-white hover:bg-slate-50 hover:border-slate-400'
                         }`}
                       >
                         <span className="block font-bold text-sm mb-1">{val}</span>
@@ -573,12 +573,12 @@ export default function StudentSurvey({ config, onSurveySubmit }: StudentSurveyP
                         key={val}
                         type="button"
                         onClick={() => handlePillSelect('materialsClear', val)}
-                        className={`py-3 px-1 border rounded-xl text-center text-xs transition-all ${
+                        className={`py-3 px-1 border rounded-xl text-center text-xs transition-all cursor-pointer active:scale-95 ${
                           formData.materialsClear === val
-                            ? 'bg-slate-900 border-slate-900 text-white font-semibold'
+                            ? 'bg-slate-900 border-slate-900 text-white font-semibold shadow-xs'
                             : showErrors && !formData.materialsClear
                             ? 'border-red-300 bg-red-50/10 text-slate-700 hover:bg-slate-50'
-                            : 'border-slate-200 text-slate-700 bg-white hover:bg-slate-50'
+                            : 'border-slate-200 text-slate-700 bg-white hover:bg-slate-50 hover:border-slate-400'
                         }`}
                       >
                         <span className="block font-bold text-sm mb-1">{val}</span>
@@ -665,10 +665,10 @@ export default function StudentSurvey({ config, onSurveySubmit }: StudentSurveyP
                         key={val}
                         type="button"
                         onClick={() => handlePillSelect('labSufficient', val)}
-                        className={`py-3 px-1 border rounded-xl text-center text-xs transition-all ${
+                        className={`py-3 px-1 border rounded-xl text-center text-xs transition-all cursor-pointer active:scale-95 ${
                           formData.labSufficient === val
-                            ? 'bg-slate-900 border-slate-900 text-white font-semibold'
-                            : 'border-slate-200 text-slate-700 bg-white hover:bg-slate-50'
+                            ? 'bg-slate-900 border-slate-900 text-white font-semibold shadow-xs'
+                            : 'border-slate-200 text-slate-700 bg-white hover:bg-slate-50 hover:border-slate-400'
                         }`}
                       >
                         <span className="block font-bold text-sm mb-1">{val}</span>
@@ -919,12 +919,12 @@ export default function StudentSurvey({ config, onSurveySubmit }: StudentSurveyP
                         key={val}
                         type="button"
                         onClick={() => handlePillSelect('overallSatisfaction', val)}
-                        className={`py-3 px-1 border rounded-xl text-center text-xs transition-all ${
+                        className={`py-3 px-1 border rounded-xl text-center text-xs transition-all cursor-pointer active:scale-95 ${
                           formData.overallSatisfaction === val
-                            ? 'bg-slate-900 border-slate-900 text-white font-semibold'
+                            ? 'bg-slate-900 border-slate-900 text-white font-semibold shadow-xs'
                             : showErrors && !formData.overallSatisfaction
                             ? 'border-red-300 bg-red-50/10 text-slate-700 hover:bg-slate-50'
-                            : 'border-slate-200 text-slate-700 bg-white hover:bg-slate-50'
+                            : 'border-slate-200 text-slate-700 bg-white hover:bg-slate-50 hover:border-slate-400'
                         }`}
                       >
                         <span className="block font-bold text-sm mb-1">{val}</span>
@@ -948,12 +948,12 @@ export default function StudentSurvey({ config, onSurveySubmit }: StudentSurveyP
                         key={val}
                         type="button"
                         onClick={() => handlePillSelect('confidence', val)}
-                        className={`py-3 px-1 border rounded-xl text-center text-xs transition-all ${
+                        className={`py-3 px-1 border rounded-xl text-center text-xs transition-all cursor-pointer active:scale-95 ${
                           formData.confidence === val
-                            ? 'bg-slate-900 border-slate-900 text-white font-semibold'
+                            ? 'bg-slate-900 border-slate-900 text-white font-semibold shadow-xs'
                             : showErrors && !formData.confidence
                             ? 'border-red-300 bg-red-50/10 text-slate-700 hover:bg-slate-50'
-                            : 'border-slate-200 text-slate-700 bg-white hover:bg-slate-50'
+                            : 'border-slate-200 text-slate-700 bg-white hover:bg-slate-50 hover:border-slate-400'
                         }`}
                       >
                         <span className="block font-bold text-sm mb-1">{val}</span>

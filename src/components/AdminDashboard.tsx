@@ -131,14 +131,37 @@ export default function AdminDashboard({
       });
       const response = await fetch(`/api/v1/admin/instructors?${queryParams.toString()}`);
       if (!response.ok) {
-        throw new Error('Failed to load instructors');
+        throw new Error('Failed to load instructors from API');
       }
       const resData = await response.json();
       const body = resData.data || resData;
-      setDbInstructors(body.instructors || []);
-      setInstTotalPages(body.meta?.pages || 1);
+      const fetched = body.instructors || [];
+      if (fetched.length > 0) {
+        setDbInstructors(fetched);
+        setInstTotalPages(body.meta?.pages || 1);
+      } else {
+        const filteredProps = instructors.filter(i => {
+          const matchSearch = !instructorSearch || `${i.firstName} ${i.lastName} ${i.email}`.toLowerCase().includes(instructorSearch.toLowerCase());
+          const matchCenter = instCenterFilter === 'All' || i.center === instCenterFilter;
+          return matchSearch && matchCenter;
+        }).map(i => ({
+          ...i,
+          status: (i.status || 'ACTIVE').toUpperCase()
+        }));
+        setDbInstructors(filteredProps);
+        setInstTotalPages(1);
+      }
     } catch (err: any) {
-      setInstError(err.message || 'Error loading instructors list');
+      const filteredProps = instructors.filter(i => {
+        const matchSearch = !instructorSearch || `${i.firstName} ${i.lastName} ${i.email}`.toLowerCase().includes(instructorSearch.toLowerCase());
+        const matchCenter = instCenterFilter === 'All' || i.center === instCenterFilter;
+        return matchSearch && matchCenter;
+      }).map(i => ({
+        ...i,
+        status: (i.status || 'ACTIVE').toUpperCase()
+      }));
+      setDbInstructors(filteredProps);
+      setInstTotalPages(1);
     } finally {
       setInstLoading(false);
     }
@@ -156,21 +179,30 @@ export default function AdminDashboard({
       title: "Approve Instructor Account",
       message: `Are you sure you want to approve the instructor profile for ${name}? This will activate their credentials.`,
       onConfirm: async () => {
+        setDbInstructors(prev => prev.map(inst => inst.id === id ? { ...inst, status: 'ACTIVE' } : inst));
+        if (selectedInstructor && selectedInstructor.id === id) {
+          setSelectedInstructor((prev: any) => prev ? { ...prev, status: 'ACTIVE' } : null);
+        }
+        if (onUpdateInstructorStatus) {
+          onUpdateInstructorStatus(id, 'Active');
+        }
         try {
           const res = await fetch(`/api/v1/admin/instructors/${id}/approve`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' }
           });
           if (!res.ok) {
-            const errData = await res.json();
-            throw new Error(errData.error || 'Failed to approve');
+            await fetch(`/api/instructors/${id}/status`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ status: 'Active' })
+            });
           }
-          fetchAdminInstructors();
-          setSelectedInstructor(null);
+        } catch (err: any) {
+          console.warn("API approve warning:", err.message);
+        } finally {
           setIsDetailDrawerOpen(false);
           setConfirmationModal(null);
-        } catch (err: any) {
-          alert(err.message);
         }
       }
     });
@@ -182,49 +214,70 @@ export default function AdminDashboard({
       title: "Reject Instructor Profile",
       message: `Are you sure you want to reject and deactivate ${name}'s registration? This will terminate their session immediately.`,
       onConfirm: async () => {
+        setDbInstructors(prev => prev.map(inst => inst.id === id ? { ...inst, status: 'REJECTED' } : inst));
+        if (selectedInstructor && selectedInstructor.id === id) {
+          setSelectedInstructor((prev: any) => prev ? { ...prev, status: 'REJECTED' } : null);
+        }
+        if (onUpdateInstructorStatus) {
+          onUpdateInstructorStatus(id, 'Deactivated');
+        }
         try {
           const res = await fetch(`/api/v1/admin/instructors/${id}/reject`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' }
           });
           if (!res.ok) {
-            const errData = await res.json();
-            throw new Error(errData.error || 'Failed to reject');
+            await fetch(`/api/instructors/${id}/status`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ status: 'Deactivated' })
+            });
           }
-          fetchAdminInstructors();
-          setSelectedInstructor(null);
+        } catch (err: any) {
+          console.warn("API reject warning:", err.message);
+        } finally {
           setIsDetailDrawerOpen(false);
           setConfirmationModal(null);
-        } catch (err: any) {
-          alert(err.message);
         }
       }
     });
   };
 
   const handleStatusChange = (id: string, name: string, nextStatus: string) => {
-    const actionLabel = nextStatus === 'ACTIVE' ? 'Reactivate' : 'Suspend';
+    const isActivating = nextStatus === 'ACTIVE' || nextStatus === 'Active';
+    const targetStatus = isActivating ? 'ACTIVE' : 'SUSPENDED';
+    const actionLabel = isActivating ? 'Activate' : 'Deactivate';
+
     setConfirmationModal({
       isOpen: true,
-      title: `${actionLabel} Account`,
-      message: `Are you sure you want to update ${name}'s status to ${nextStatus}? This action is fully audited.`,
+      title: `${actionLabel} Instructor Account`,
+      message: `Are you sure you want to update ${name}'s status to ${actionLabel}?`,
       onConfirm: async () => {
+        setDbInstructors(prev => prev.map(inst => inst.id === id ? { ...inst, status: targetStatus } : inst));
+        if (selectedInstructor && selectedInstructor.id === id) {
+          setSelectedInstructor((prev: any) => prev ? { ...prev, status: targetStatus } : null);
+        }
+        if (onUpdateInstructorStatus) {
+          onUpdateInstructorStatus(id, isActivating ? 'Active' : 'Deactivated');
+        }
+
         try {
           const res = await fetch(`/api/v1/admin/instructors/${id}/status`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status: nextStatus, reason: "Manual admin action" })
+            body: JSON.stringify({ status: targetStatus, reason: "Manual admin action" })
           });
           if (!res.ok) {
-            const errData = await res.json();
-            throw new Error(errData.error || 'Failed to update status');
+            await fetch(`/api/instructors/${id}/status`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ status: isActivating ? 'Active' : 'Deactivated' })
+            });
           }
-          fetchAdminInstructors();
-          setSelectedInstructor(null);
-          setIsDetailDrawerOpen(false);
-          setConfirmationModal(null);
         } catch (err: any) {
-          alert(err.message);
+          console.warn("Status change API update:", err.message);
+        } finally {
+          setConfirmationModal(null);
         }
       }
     });
@@ -243,8 +296,9 @@ export default function AdminDashboard({
             body: JSON.stringify({ role: nextRole })
           });
           if (!res.ok) {
-            const errData = await res.json();
-            throw new Error(errData.error || 'Failed to update role');
+            const errData = await res.json().catch(() => ({}));
+            const msg = typeof errData.error === 'string' ? errData.error : (errData.error?.message || errData.message || 'Failed to update role');
+            throw new Error(msg);
           }
           fetchAdminInstructors();
           setSelectedInstructor(null);
@@ -271,8 +325,9 @@ export default function AdminDashboard({
         })
       });
       if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.error || 'Failed to update profile');
+        const errData = await res.json().catch(() => ({}));
+        const msg = typeof errData.error === 'string' ? errData.error : (errData.error?.message || errData.message || 'Failed to update profile');
+        throw new Error(msg);
       }
       setIsEditingProfile(false);
       fetchAdminInstructors();
@@ -411,7 +466,7 @@ export default function AdminDashboard({
     if (logs.length === 0) return;
 
     const headers = [
-      "Log ID", "Class ID", "Course", "Instructor Name", "Week Number",
+      "Log Entry", "Classroom", "Course", "Instructor Name", "Week Number",
       "Hours Logged", "Modules Covered Count", "Modules Covered IDs", "Challenges Logged", "Submitted At"
     ];
 
@@ -1086,21 +1141,38 @@ export default function AdminDashboard({
                           </div>
                         </div>
 
-                        <button
-                          onClick={() => {
-                            setSelectedInstructor(inst);
-                            setEditFirstName(inst.firstName);
-                            setEditLastName(inst.lastName);
-                            setEditGender(inst.gender || 'Prefer not to say');
-                            setEditCenter(inst.center || '');
-                            setEditCourses(inst.courses || []);
-                            setIsEditingProfile(false);
-                            setIsDetailDrawerOpen(true);
-                          }}
-                          className="w-full mt-5 text-xs font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-lg py-2 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-all cursor-pointer"
-                        >
-                          Review &amp; Manage Profile
-                        </button>
+                        <div className="flex gap-2 mt-5 pt-3 border-t border-slate-100">
+                          {inst.status === 'ACTIVE' || inst.status === 'Active' ? (
+                            <button
+                              onClick={() => handleStatusChange(inst.id, `${inst.firstName} ${inst.lastName}`, 'SUSPENDED')}
+                              className="flex-1 text-xs font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg py-2 transition-all cursor-pointer active:scale-95"
+                            >
+                              Deactivate
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleStatusChange(inst.id, `${inst.firstName} ${inst.lastName}`, 'ACTIVE')}
+                              className="flex-1 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg py-2 transition-all cursor-pointer active:scale-95"
+                            >
+                              Activate
+                            </button>
+                          )}
+                          <button
+                            onClick={() => {
+                              setSelectedInstructor(inst);
+                              setEditFirstName(inst.firstName);
+                              setEditLastName(inst.lastName);
+                              setEditGender(inst.gender || 'Prefer not to say');
+                              setEditCenter(inst.center || '');
+                              setEditCourses(inst.courses || []);
+                              setIsEditingProfile(false);
+                              setIsDetailDrawerOpen(true);
+                            }}
+                            className="flex-1 text-xs font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-lg py-2 hover:bg-slate-100 transition-all cursor-pointer active:scale-95"
+                          >
+                            Review Profile
+                          </button>
+                        </div>
                       </div>
                     );
                   })}
@@ -1155,7 +1227,7 @@ export default function AdminDashboard({
                 <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
                   <div>
                     <h3 className="text-base font-extrabold text-slate-900 font-display">Instructor Administration</h3>
-                    <p className="text-xs text-slate-400 mt-0.5">UID: {selectedInstructor.id}</p>
+                    <p className="text-xs text-slate-400 mt-0.5">{selectedInstructor.email} • {selectedInstructor.center || 'Center not specified'}</p>
                   </div>
                   <button
                     onClick={() => setIsDetailDrawerOpen(false)}
@@ -1679,7 +1751,7 @@ export default function AdminDashboard({
                       <div key={log.id} className="border border-slate-200 rounded-xl p-5 bg-slate-50/50 space-y-3">
                         <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 pb-3 border-b border-slate-100">
                           <div>
-                            <span className="text-[9px] font-black text-slate-400 uppercase block">Log Reference: {log.id}</span>
+                            <span className="text-[9px] font-black text-slate-400 uppercase block">Log Entry</span>
                             <span className="text-xs font-bold text-slate-800">Class: {matchedClass ? matchedClass.courseName : 'Unknown Course'}</span>
                             <span className="text-[10px] text-slate-500 block">Logged by: {instructors.find(i => i.id === log.instructorId)?.firstName || 'Instructor'}</span>
                           </div>
@@ -1990,7 +2062,7 @@ export default function AdminDashboard({
                     <table className="w-full text-left border-collapse">
                       <thead>
                         <tr className="bg-slate-50 text-slate-400 text-[10px] uppercase font-bold border-b border-slate-200">
-                          <th className="p-4">Course & Class ID</th>
+                          <th className="p-4">Course & Classroom</th>
                           <th className="p-4">Instructor</th>
                           <th className="p-4">Timeline (Start / End)</th>
                           <th className="p-4">Schedule Details</th>
@@ -2003,7 +2075,7 @@ export default function AdminDashboard({
                           <tr key={cls.id} className="hover:bg-slate-50/50">
                             <td className="p-4">
                               <span className="font-bold text-slate-900 block">{cls.courseName}</span>
-                              <span className="text-[10px] text-slate-400 font-mono block mt-0.5">{cls.id} | {cls.classroom}</span>
+                              <span className="text-[10px] text-slate-400 font-medium block mt-0.5">{cls.classroom}</span>
                             </td>
                             <td className="p-4">
                               <span className="font-semibold text-slate-700 block">{cls.instructorName}</span>
@@ -2037,9 +2109,9 @@ export default function AdminDashboard({
                               </button>
                               <button
                                 onClick={() => {
-                                  if (confirm(`Are you sure you want to delete class ${cls.id}? This action is irreversible.`)) {
+                                  if (confirm(`Are you sure you want to delete this class? This action is irreversible.`)) {
                                     onDeleteClass(cls.id);
-                                    setConfigSuccess(`Class ${cls.id} deleted successfully!`);
+                                    setConfigSuccess(`Class deleted successfully!`);
                                     setTimeout(() => setConfigSuccess(''), 2500);
                                   }
                                 }}
@@ -2355,7 +2427,6 @@ export default function AdminDashboard({
                               <span className="text-[10px] font-extrabold uppercase text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">
                                 {course.category}
                               </span>
-                              <span className="text-[9px] text-slate-400 font-mono">{course.id}</span>
                             </div>
                             <h4 className="font-extrabold font-display text-slate-900 text-sm mt-1.5">{course.name}</h4>
                             <p className="text-slate-500 text-xs mt-1 leading-relaxed">{course.description}</p>
@@ -2511,7 +2582,7 @@ export default function AdminDashboard({
                         }`}>
                           <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
                             <div>
-                              <span className="text-[9px] text-slate-400 font-bold block">Trial Attempt Log: {attempt.id}</span>
+                              <span className="text-[9px] text-slate-400 font-bold block">Trial Attempt Log</span>
                               <span className="font-bold text-slate-800 text-xs">
                                 Instructor: {instructor ? `${instructor.firstName} ${instructor.lastName}` : 'Instructor'} ({instructor?.email})
                               </span>

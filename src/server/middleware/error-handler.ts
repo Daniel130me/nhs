@@ -18,19 +18,33 @@ export function errorHandlerMiddleware(
   logger.error(`[Request-ID: ${requestId}] Unhandled Error: ${err.message}`, err);
 
   // 1. Handle Zod validation errors
-  if (err instanceof ZodError) {
+  if (err instanceof ZodError || err.name === "ZodError") {
     const fields: Record<string, string[]> = {};
-    err.issues.forEach((issue) => {
-      const path = issue.path.join(".");
-      if (!fields[path]) {
-        fields[path] = [];
-      }
-      fields[path].push(issue.message);
-    });
+    const errorMessages: string[] = [];
+
+    const issues = err.issues || err.errors || [];
+    if (Array.isArray(issues)) {
+      issues.forEach((issue) => {
+        const path = Array.isArray(issue.path) ? issue.path.join(".") : "";
+        if (path) {
+          if (!fields[path]) {
+            fields[path] = [];
+          }
+          fields[path].push(issue.message);
+          errorMessages.push(`${path}: ${issue.message}`);
+        } else {
+          errorMessages.push(issue.message);
+        }
+      });
+    }
+
+    const detailedMessage = errorMessages.length > 0
+      ? errorMessages.join("; ")
+      : "The submitted information is invalid";
 
     sendError(
       res,
-      "The submitted information is invalid",
+      detailedMessage,
       "VALIDATION_ERROR",
       400,
       fields

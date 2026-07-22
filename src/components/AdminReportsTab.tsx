@@ -178,7 +178,7 @@ export default function AdminReportsTab({ config, classes }: AdminReportsTabProp
   const handleIssueCertificate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!issueClassId || !issueStudentId) {
-      setIssueError('Class ID and Student ID are required.');
+      setIssueError('Class and Student identifiers are required.');
       return;
     }
 
@@ -852,22 +852,22 @@ export default function AdminReportsTab({ config, classes }: AdminReportsTabProp
 
               <form onSubmit={handleIssueCertificate} className="space-y-4 text-xs">
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Class ID</label>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Class Identifier</label>
                   <input
                     type="text"
                     required
-                    placeholder="Enter Class ID (UUID)"
+                    placeholder="Enter Class Identifier"
                     value={issueClassId}
                     onChange={(e) => setIssueClassId(e.target.value)}
                     className="w-full text-xs border border-slate-200 rounded-lg p-2.5 bg-slate-50 font-mono"
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Student ID</label>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Student Identifier</label>
                   <input
                     type="text"
                     required
-                    placeholder="Enter Student User ID (UUID)"
+                    placeholder="Enter Student Identifier"
                     value={issueStudentId}
                     onChange={(e) => setIssueStudentId(e.target.value)}
                     className="w-full text-xs border border-slate-200 rounded-lg p-2.5 bg-slate-50 font-mono"

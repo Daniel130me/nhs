@@ -111,22 +111,30 @@ export default function App() {
       try {
         console.log("[App] Hydrating operational states from Neon Postgres server API...");
         const [configRes, instRes, classesRes, logsRes, surveysRes, coursesRes, examAttemptsRes] = await Promise.all([
-          fetch("/api/config").then((r) => (r.ok ? r.json() : DEFAULT_CONFIG)),
-          fetch("/api/instructors").then((r) => (r.ok ? r.json() : [])),
-          fetch("/api/classes").then((r) => (r.ok ? r.json() : [])),
-          fetch("/api/logs").then((r) => (r.ok ? r.json() : [])),
-          fetch("/api/surveys").then((r) => (r.ok ? r.json() : [])),
-          fetch("/api/courses").then((r) => (r.ok ? r.json() : [])),
-          fetch("/api/exam-attempts").then((r) => (r.ok ? r.json() : []))
+          fetch("/api/config").then((r) => (r.ok ? r.json() : null)),
+          fetch("/api/instructors").then((r) => (r.ok ? r.json() : null)),
+          fetch("/api/classes").then((r) => (r.ok ? r.json() : null)),
+          fetch("/api/logs").then((r) => (r.ok ? r.json() : null)),
+          fetch("/api/surveys").then((r) => (r.ok ? r.json() : null)),
+          fetch("/api/courses").then((r) => (r.ok ? r.json() : null)),
+          fetch("/api/exam-attempts").then((r) => (r.ok ? r.json() : null))
         ]);
 
-        if (configRes && configRes.centers) setConfig(configRes);
-        if (instRes && instRes.length > 0) setInstructors(instRes);
-        if (classesRes && classesRes.length > 0) setClasses(classesRes);
-        if (logsRes && logsRes.length > 0) setLogs(logsRes);
-        if (surveysRes && surveysRes.length > 0) setSurveys(surveysRes);
-        if (coursesRes && coursesRes.length > 0) setCourses(coursesRes);
-        if (examAttemptsRes && examAttemptsRes.length > 0) setExamAttempts(examAttemptsRes);
+        const configData = configRes?.data || configRes;
+        const instData = instRes?.data || instRes;
+        const classesData = classesRes?.data || classesRes;
+        const logsData = logsRes?.data || logsRes;
+        const surveysData = surveysRes?.data || surveysRes;
+        const coursesData = coursesRes?.data || coursesRes;
+        const examAttemptsData = examAttemptsRes?.data || examAttemptsRes;
+
+        if (configData && configData.centers) setConfig(configData);
+        if (Array.isArray(instData) && instData.length > 0) setInstructors(instData);
+        if (Array.isArray(classesData) && classesData.length > 0) setClasses(classesData);
+        if (Array.isArray(logsData) && logsData.length > 0) setLogs(logsData);
+        if (Array.isArray(surveysData) && surveysData.length > 0) setSurveys(surveysData);
+        if (Array.isArray(coursesData) && coursesData.length > 0) setCourses(coursesData);
+        if (Array.isArray(examAttemptsData) && examAttemptsData.length > 0) setExamAttempts(examAttemptsData);
       } catch (err) {
         console.error("Neon Postgres synchronization failed. Standard memory cache used.", err);
       } finally {
@@ -204,14 +212,34 @@ export default function App() {
       const isInstructor = newInst.role === 'Instructor';
       const registerUrl = isInstructor ? "/api/v1/auth/register/instructor" : "/api/v1/auth/register";
 
+      const pwd = (newInst as any).password || "DefaultP@ss123";
+      const payload = isInstructor ? {
+        firstName: newInst.firstName,
+        lastName: newInst.lastName,
+        email: newInst.email,
+        password: pwd,
+        passwordConfirmation: (newInst as any).passwordConfirmation || pwd,
+        center: newInst.center || "Headquarters",
+        courses: newInst.courses && newInst.courses.length > 0 ? newInst.courses : ["General Healthcare"],
+        gender: newInst.gender || "Prefer not to say"
+      } : newInst;
+
       const response = await fetch(registerUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newInst)
+        body: JSON.stringify(payload)
       });
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.error || "Failed to register profile");
+        let errMsg = "Failed to register profile";
+        if (typeof errData.error === "string") {
+          errMsg = errData.error;
+        } else if (errData.error && typeof errData.error.message === "string") {
+          errMsg = errData.error.message;
+        } else if (typeof errData.message === "string") {
+          errMsg = errData.message;
+        }
+        throw new Error(errMsg);
       }
       const resData = await response.json();
       const user = resData.data || resData;

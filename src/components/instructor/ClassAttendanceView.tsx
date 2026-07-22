@@ -400,7 +400,7 @@ export default function ClassAttendanceView({
             <History className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
             <div>
               <span className="font-bold text-slate-800 block">Server-Side Attendance Security Auditing</span>
-              <p className="mt-0.5">Recording and changing attendance records automatically triggers database trigger audits capturing your instructor account ID, IP address, and old vs new state values for absolute integrity.</p>
+              <p className="mt-0.5">Recording and changing attendance records automatically triggers database trigger audits capturing your instructor account profile, IP address, and old vs new state values for absolute integrity.</p>
             </div>
           </div>
 
