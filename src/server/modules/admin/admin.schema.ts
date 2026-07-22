@@ -6,7 +6,7 @@ export const createStudentSchema = z.object({
   email: z.string().email("Invalid email format").max(255),
   studentNumber: z.string().optional(),
   phone: z.string().optional().nullable(),
-  centerId: z.string().uuid("Invalid center ID format").optional().nullable(),
+  centerId: z.string().optional().nullable(),
   gender: z.string().optional().nullable(),
 });
 
@@ -18,7 +18,7 @@ export const importStudentsSchema = z.object({
       email: z.string().email("Invalid email format").max(255),
       studentNumber: z.string().optional(),
       phone: z.string().optional().nullable(),
-      centerId: z.string().uuid("Invalid center ID format").optional().nullable(),
+      centerId: z.string().optional().nullable(),
       gender: z.string().optional().nullable(),
     })
   ).min(1, "At least one student is required for import"),

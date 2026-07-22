@@ -13,6 +13,7 @@ import {
   Calendar,
   Clock,
   User,
+  UserPlus,
   Activity,
   Smile,
   Frown,
@@ -86,7 +87,132 @@ export default function AdminDashboard({
   const [severityFilter, setSeverityFilter] = useState('All');
 
   // Sub-tabs for the Admin portal
-  const [adminTab, setAdminTab] = useState<'Analytics' | 'Instructors' | 'Surveys' | 'InstructorLogs' | 'Config' | 'Reports'>('Analytics');
+  const [adminTab, setAdminTab] = useState<'Analytics' | 'Instructors' | 'Students' | 'Surveys' | 'InstructorLogs' | 'Config' | 'Reports'>('Analytics');
+
+  // Students administration states
+  const [dbStudents, setDbStudents] = useState<any[]>([]);
+  const [studentSearch, setStudentSearch] = useState('');
+  const [studentStatusFilter, setStudentStatusFilter] = useState('All');
+  const [studentCenterFilter, setStudentCenterFilter] = useState('All');
+  const [studentLoading, setStudentLoading] = useState(false);
+  const [isStudentModalOpen, setIsStudentModalOpen] = useState(false);
+  const [newStudentFirstName, setNewStudentFirstName] = useState('');
+  const [newStudentLastName, setNewStudentLastName] = useState('');
+  const [newStudentEmail, setNewStudentEmail] = useState('');
+  const [newStudentStudentNumber, setNewStudentStudentNumber] = useState('');
+  const [newStudentPhone, setNewStudentPhone] = useState('');
+  const [newStudentCenterId, setNewStudentCenterId] = useState('');
+  const [newStudentGender, setNewStudentGender] = useState('Male');
+  const [studentFormError, setStudentFormError] = useState('');
+  const [createdStudentResult, setCreatedStudentResult] = useState<any | null>(null);
+
+  const fetchAdminStudents = async () => {
+    setStudentLoading(true);
+    try {
+      const queryParams = new URLSearchParams({
+        search: studentSearch,
+        status: studentStatusFilter,
+        center: studentCenterFilter,
+      });
+      const token = localStorage.getItem('nhs_token');
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      const response = await fetch(`/api/v1/admin/students?${queryParams.toString()}`, { headers });
+      if (response.ok) {
+        const resData = await response.json();
+        const body = resData.data || resData;
+        setDbStudents(body.students || []);
+      }
+    } catch (err) {
+      console.error("Failed to load students:", err);
+    } finally {
+      setStudentLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (adminTab === 'Students') {
+      fetchAdminStudents();
+    }
+  }, [adminTab, studentSearch, studentStatusFilter, studentCenterFilter]);
+
+  const handleCreateStudent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setStudentFormError('');
+    try {
+      const token = localStorage.getItem('nhs_token');
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      const res = await fetch('/api/v1/admin/students', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          firstName: newStudentFirstName,
+          lastName: newStudentLastName,
+          email: newStudentEmail,
+          studentNumber: newStudentStudentNumber || undefined,
+          phone: newStudentPhone || undefined,
+          centerId: newStudentCenterId || undefined,
+          gender: newStudentGender || undefined,
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || data.error || 'Failed to create student');
+      }
+
+      const created = data.data || data;
+      setCreatedStudentResult(created);
+      setIsStudentModalOpen(false);
+      setNewStudentFirstName('');
+      setNewStudentLastName('');
+      setNewStudentEmail('');
+      setNewStudentStudentNumber('');
+      setNewStudentPhone('');
+      setNewStudentCenterId('');
+      fetchAdminStudents();
+    } catch (err: any) {
+      setStudentFormError(err.message || 'Failed to create student');
+    }
+  };
+
+  const handleReinviteStudent = async (id: string) => {
+    try {
+      const token = localStorage.getItem('nhs_token');
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      const res = await fetch(`/api/v1/admin/students/${id}/invite`, {
+        method: 'POST',
+        headers
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || 'Failed to generate invitation');
+      }
+      const resObj = data.data || data;
+      if (resObj && resObj.activationToken) {
+        setCreatedStudentResult({
+          firstName: resObj.firstName || 'Student',
+          lastName: resObj.lastName || '',
+          email: resObj.email || '',
+          studentNumber: resObj.studentNumber || '',
+          activationToken: resObj.activationToken
+        });
+      } else {
+        alert("New student invitation generated successfully!");
+      }
+      fetchAdminStudents();
+    } catch (err: any) {
+      alert(err.message || 'Failed to re-invite student');
+    }
+  };
 
   // Real-time instructors fetching states
   const [dbInstructors, setDbInstructors] = useState<any[]>([]);
@@ -863,6 +989,7 @@ export default function AdminDashboard({
           {[
             { id: 'Analytics', label: 'Operational Overview' },
             { id: 'Instructors', label: 'Instructors' },
+            { id: 'Students', label: 'Students' },
             { id: 'Surveys', label: `Student Pulse (${surveys.length})` },
             { id: 'InstructorLogs', label: 'Instructor Logs' },
             { id: 'Reports', label: 'Reports & Certificates' },
@@ -1282,6 +1409,121 @@ export default function AdminDashboard({
                 )}
               </div>
             )}
+          </motion.div>
+        )}
+
+        {/* STUDENTS ADMINISTRATION PANEL */}
+        {adminTab === 'Students' && (
+          <motion.div
+            key="students-admin"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="space-y-6"
+          >
+            {/* Toolbar */}
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex flex-wrap items-center gap-3 flex-grow">
+                <div className="relative flex-grow max-w-sm">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={studentSearch}
+                    onChange={(e) => setStudentSearch(e.target.value)}
+                    placeholder="Search by student name, email, number..."
+                    className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
+                  />
+                </div>
+
+                <select
+                  value={studentCenterFilter}
+                  onChange={(e) => setStudentCenterFilter(e.target.value)}
+                  className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700"
+                >
+                  <option value="All">All Centers</option>
+                  {config.centers.map((c: string) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+
+                <select
+                  value={studentStatusFilter}
+                  onChange={(e) => setStudentStatusFilter(e.target.value)}
+                  className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700"
+                >
+                  <option value="All">All Statuses</option>
+                  <option value="ACTIVE">Active</option>
+                  <option value="PENDING">Pending Activation</option>
+                  <option value="SUSPENDED">Suspended</option>
+                </select>
+              </div>
+
+              <button
+                onClick={() => setIsStudentModalOpen(true)}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all cursor-pointer flex items-center gap-2 shrink-0"
+              >
+                <Plus className="w-4 h-4" />
+                Register New Student
+              </button>
+            </div>
+
+            {/* Students Table */}
+            <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                      <th className="py-3.5 px-4">Student</th>
+                      <th className="py-3.5 px-4">Student Number</th>
+                      <th className="py-3.5 px-4">Center</th>
+                      <th className="py-3.5 px-4">Status</th>
+                      <th className="py-3.5 px-4">Phone</th>
+                      <th className="py-3.5 px-4 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
+                    {studentLoading ? (
+                      <tr>
+                        <td colSpan={6} className="py-12 text-center text-slate-400">Loading students...</td>
+                      </tr>
+                    ) : dbStudents.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="py-12 text-center text-slate-400">No students registered yet. Click "Register New Student" to add one.</td>
+                      </tr>
+                    ) : (
+                      dbStudents.map((stu) => (
+                        <tr key={stu.id} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="py-3.5 px-4">
+                            <div className="font-bold text-slate-900">{stu.firstName} {stu.lastName}</div>
+                            <div className="text-[11px] text-slate-400">{stu.email}</div>
+                          </td>
+                          <td className="py-3.5 px-4 font-mono text-slate-600">{stu.studentNumber || 'N/A'}</td>
+                          <td className="py-3.5 px-4 font-medium">{stu.center || 'Headquarters'}</td>
+                          <td className="py-3.5 px-4">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                              String(stu.status).toUpperCase() === 'ACTIVE'
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : 'bg-amber-50 text-amber-700 border border-amber-200'
+                            }`}>
+                              {stu.status}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4 text-slate-500">{stu.phone || 'No phone'}</td>
+                          <td className="py-3.5 px-4 text-right space-x-2">
+                            <button
+                              onClick={() => handleReinviteStudent(stu.id)}
+                              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-[11px] rounded-lg transition-all cursor-pointer"
+                            >
+                              Regenerate Invite
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </motion.div>
         )}
 
@@ -2704,6 +2946,196 @@ export default function AdminDashboard({
                   className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-lg transition-all cursor-pointer"
                 >
                   Confirm
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+      {/* REGISTER STUDENT MODAL */}
+      <AnimatePresence>
+        {isStudentModalOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <div
+              className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+              onClick={() => setIsStudentModalOpen(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="relative bg-white max-w-lg w-full rounded-2xl p-6 shadow-2xl border border-slate-200 z-10 space-y-4"
+            >
+              <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+                <h3 className="text-sm font-extrabold text-slate-900 font-display flex items-center gap-2">
+                  <UserPlus className="w-4 h-4 text-red-500" />
+                  Register New Student
+                </h3>
+                <button
+                  onClick={() => setIsStudentModalOpen(false)}
+                  className="text-slate-400 hover:text-slate-600 text-xs font-bold"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {studentFormError && (
+                <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs">
+                  {studentFormError}
+                </div>
+              )}
+
+              <form onSubmit={handleCreateStudent} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">First Name *</label>
+                    <input
+                      type="text"
+                      required
+                      value={newStudentFirstName}
+                      onChange={(e) => setNewStudentFirstName(e.target.value)}
+                      placeholder="e.g. John"
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Last Name *</label>
+                    <input
+                      type="text"
+                      required
+                      value={newStudentLastName}
+                      onChange={(e) => setNewStudentLastName(e.target.value)}
+                      placeholder="e.g. Doe"
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Email Address *</label>
+                  <input
+                    type="email"
+                    required
+                    value={newStudentEmail}
+                    onChange={(e) => setNewStudentEmail(e.target.value)}
+                    placeholder="student@example.com"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Student Number (Optional)</label>
+                    <input
+                      type="text"
+                      value={newStudentStudentNumber}
+                      onChange={(e) => setNewStudentStudentNumber(e.target.value)}
+                      placeholder="Auto-generated if empty"
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Phone Number</label>
+                    <input
+                      type="text"
+                      value={newStudentPhone}
+                      onChange={(e) => setNewStudentPhone(e.target.value)}
+                      placeholder="+234..."
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Center</label>
+                    <select
+                      value={newStudentCenterId}
+                      onChange={(e) => setNewStudentCenterId(e.target.value)}
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs"
+                    >
+                      <option value="">Select Center...</option>
+                      {config.centers.map((c: string) => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Gender</label>
+                    <select
+                      value={newStudentGender}
+                      onChange={(e) => setNewStudentGender(e.target.value)}
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs"
+                    >
+                      <option value="Male">Male</option>
+                      <option value="Female">Female</option>
+                      <option value="Prefer not to say">Prefer not to say</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsStudentModalOpen(false)}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl transition-all cursor-pointer shadow-sm"
+                  >
+                    Create & Generate Code
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ACTIVATION CODE SUCCESS MODAL */}
+      <AnimatePresence>
+        {createdStudentResult && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+            <div
+              className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"
+              onClick={() => setCreatedStudentResult(null)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="relative bg-white max-w-md w-full rounded-2xl p-6 shadow-2xl border border-slate-200 z-10 space-y-4 text-center"
+            >
+              <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto">
+                <CheckCircle2 className="w-6 h-6" />
+              </div>
+              <h3 className="text-base font-extrabold text-slate-900 font-display">Student Created Successfully!</h3>
+              <p className="text-xs text-slate-500">
+                Share this activation code with <strong className="text-slate-800">{createdStudentResult.firstName} {createdStudentResult.lastName}</strong> ({createdStudentResult.email}). They can use it to activate their portal account.
+              </p>
+
+              <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl font-mono text-xs text-slate-800 break-all select-all font-bold">
+                {createdStudentResult.activationToken}
+              </div>
+
+              <div className="pt-2">
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(createdStudentResult.activationToken);
+                    alert("Activation code copied to clipboard!");
+                  }}
+                  className="w-full py-2.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl transition-all cursor-pointer shadow-sm mb-2"
+                >
+                  Copy Activation Code
+                </button>
+                <button
+                  onClick={() => setCreatedStudentResult(null)}
+                  className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all cursor-pointer"
+                >
+                  Close
                 </button>
               </div>
             </motion.div>

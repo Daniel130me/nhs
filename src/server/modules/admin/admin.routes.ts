@@ -513,12 +513,28 @@ async function createAndInviteStudentTx(
     throw new BadRequestError(`A student with email ${normalizedEmail} already exists.`);
   }
 
-  // Get center name if centerId is provided
+  // Get center name and centreUuid if centerId is provided
   let centerName: string | null = null;
+  let centreUuid: string | null = null;
   if (data.centerId) {
-    const centerRes = await query("SELECT name FROM centres WHERE id = $1", [data.centerId]);
-    if (centerRes.length > 0) {
-      centerName = centerRes[0].name;
+    const isUuid = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(data.centerId);
+    if (isUuid) {
+      centreUuid = data.centerId;
+      const centerRes = await query("SELECT name FROM centres WHERE id = $1", [data.centerId]);
+      if (centerRes.length > 0) {
+        centerName = centerRes[0].name;
+      }
+    } else {
+      centerName = data.centerId;
+      const centerRes = await query("SELECT id FROM centres WHERE LOWER(name) = LOWER($1) LIMIT 1", [data.centerId]);
+      if (centerRes.length > 0) {
+        centreUuid = centerRes[0].id;
+      } else {
+        const ins = await query("INSERT INTO centres (name, code, status) VALUES ($1, $2, 'ACTIVE') ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name RETURNING id", [data.centerId, data.centerId.toUpperCase().slice(0, 10)]);
+        if (ins.length > 0) {
+          centreUuid = ins[0].id;
+        }
+      }
     }
   }
 
@@ -539,11 +555,16 @@ async function createAndInviteStudentTx(
     await query(
       `INSERT INTO student_profiles (user_id, student_number, centre_id, phone, admission_date)
        VALUES ($1, $2, $3, $4, NOW())`,
-      [userId, finalStudentNumber, data.centerId || null, data.phone || null]
+      [userId, finalStudentNumber, centreUuid, data.phone || null]
     );
 
-    // Create invitation
-    const rawToken = crypto.randomBytes(32).toString("hex");
+    // Create invitation (6-character activation code)
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let rawToken = "";
+    const bytes = crypto.randomBytes(6);
+    for (let i = 0; i < 6; i++) {
+      rawToken += chars[bytes[i] % chars.length];
+    }
     const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
@@ -564,12 +585,63 @@ async function createAndInviteStudentTx(
       lastName: data.lastName,
       email: normalizedEmail,
       studentNumber: finalStudentNumber,
+      activationToken: rawToken,
     };
   } catch (err) {
     await query("ROLLBACK");
     throw err;
   }
 }
+
+// GET /api/v1/admin/students
+router.get(
+  "/students",
+  asyncHandler(async (req, res) => {
+    const search = req.query.search ? String(req.query.search).trim() : "";
+    const status = req.query.status ? String(req.query.status).trim() : "All";
+    const center = req.query.center ? String(req.query.center).trim() : "All";
+
+    let sql = `
+      SELECT 
+        u.id, 
+        u.first_name AS "firstName", 
+        u.last_name AS "lastName", 
+        u.email, 
+        u.role, 
+        u.status, 
+        u.center, 
+        u.gender,
+        u.created_at AS "createdAt",
+        sp.student_number AS "studentNumber",
+        sp.phone
+      FROM users u
+      LEFT JOIN student_profiles sp ON u.id = sp.user_id
+      WHERE u.role = 'STUDENT' AND u.deleted_at IS NULL
+    `;
+    const params: any[] = [];
+
+    if (search) {
+      params.push(`%${search}%`);
+      sql += ` AND (u.first_name ILIKE $${params.length} OR u.last_name ILIKE $${params.length} OR u.email ILIKE $${params.length} OR sp.student_number ILIKE $${params.length})`;
+    }
+
+    if (status && status !== "All") {
+      params.push(status.toUpperCase());
+      sql += ` AND UPPER(u.status::text) = $${params.length}`;
+    }
+
+    if (center && center !== "All") {
+      params.push(center);
+      sql += ` AND u.center = $${params.length}`;
+    }
+
+    sql += ` ORDER BY u.created_at DESC`;
+
+    const rows = await query(sql, params);
+
+    return sendSuccess(res, { students: rows }, "Students retrieved successfully");
+  })
+);
 
 // POST /api/v1/admin/students
 router.post(
@@ -647,7 +719,12 @@ router.post(
     }
 
     const student = students[0];
-    const rawToken = crypto.randomBytes(32).toString("hex");
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let rawToken = "";
+    const bytes = crypto.randomBytes(6);
+    for (let i = 0; i < 6; i++) {
+      rawToken += chars[bytes[i] % chars.length];
+    }
     const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 

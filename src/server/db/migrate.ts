@@ -680,7 +680,7 @@ const MIGRATIONS: Migration[] = [
     id: "012_fix_pending_instructors_status",
     queries: [
       `UPDATE instructors SET status = 'Pending' WHERE status = 'Deactivated' OR status IS NULL;`,
-      `UPDATE users SET status = 'PENDING' WHERE role = 'INSTRUCTOR' AND (status = 'SUSPENDED' OR status = 'DEACTIVATED');`
+      `UPDATE users SET status = 'PENDING' WHERE role = 'INSTRUCTOR' AND status = 'SUSPENDED';`
     ]
   }
 ];
