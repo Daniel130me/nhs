@@ -84,7 +84,7 @@ router.post(
     // Insert into legacy instructors table to ensure backward compatibility
     await query(
       `INSERT INTO instructors (id, first_name, last_name, email, password, gender, center, courses, role, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'Instructor', 'Deactivated')`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'Instructor', 'Pending')`,
       [
         userId,
         firstName,
@@ -158,7 +158,7 @@ router.post(
 
     await query(
       `INSERT INTO instructors (id, first_name, last_name, email, password, gender, center, courses, role, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'Instructor', 'Deactivated')`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'Instructor', 'Pending')`,
       [
         userId,
         firstName,

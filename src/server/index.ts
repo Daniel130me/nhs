@@ -11,7 +11,11 @@ async function start() {
     logger.info("Starting New Horizons System backend server...");
 
     // 1. Run migrations and database seeding checks
-    await migrate();
+    try {
+      await migrate();
+    } catch (migErr) {
+      logger.error("Database migration check encountered an error on boot:", migErr);
+    }
 
     // 2. Setup SPA dev / production server integrations on app
     if (env.NODE_ENV !== "production") {

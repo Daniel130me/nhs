@@ -675,6 +675,13 @@ const MIGRATIONS: Migration[] = [
       `CREATE INDEX IF NOT EXISTS certificates_student_id_idx ON certificates(student_id);`,
       `CREATE INDEX IF NOT EXISTS certificates_class_id_idx ON certificates(class_id);`
     ]
+  },
+  {
+    id: "012_fix_pending_instructors_status",
+    queries: [
+      `UPDATE instructors SET status = 'Pending' WHERE status = 'Deactivated' OR status IS NULL;`,
+      `UPDATE users SET status = 'PENDING' WHERE role = 'INSTRUCTOR' AND (status = 'SUSPENDED' OR status = 'DEACTIVATED');`
+    ]
   }
 ];
 

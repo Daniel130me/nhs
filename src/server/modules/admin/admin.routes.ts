@@ -57,6 +57,8 @@ router.get(
         sql += ` AND (UPPER(status) = 'SUSPENDED' OR UPPER(status) = 'DEACTIVATED')`;
       } else if (uStatus === 'ACTIVE' || uStatus === 'APPROVED') {
         sql += ` AND (UPPER(status) = 'ACTIVE' OR UPPER(status) = 'APPROVED')`;
+      } else if (uStatus === 'PENDING' || uStatus === 'PENDING_APPROVAL') {
+        sql += ` AND (UPPER(status) = 'PENDING' OR UPPER(status) = 'PENDING_APPROVAL' OR UPPER(status) = 'PENDING_ACTIVATION' OR UPPER(status) = 'UNVERIFIED')`;
       } else {
         params.push(uStatus);
         sql += ` AND UPPER(status) = $${params.length}`;

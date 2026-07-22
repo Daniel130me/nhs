@@ -122,12 +122,13 @@ export default function AdminDashboard({
       const fullName = `${i.firstName || ''} ${i.lastName || ''} ${i.email || ''}`.toLowerCase();
       const matchSearch = !instructorSearch || fullName.includes(instructorSearch.toLowerCase());
       
-      const st = String(i.status || 'ACTIVE').toUpperCase();
+      const st = String(i.status || 'PENDING').toUpperCase();
       const filtSt = instStatusFilter.toUpperCase();
       const matchStatus = instStatusFilter === 'All' || 
         st === filtSt || 
         (filtSt === 'SUSPENDED' && (st === 'DEACTIVATED' || st === 'SUSPENDED')) ||
-        (filtSt === 'ACTIVE' && (st === 'ACTIVE' || st === 'APPROVED'));
+        (filtSt === 'ACTIVE' && (st === 'ACTIVE' || st === 'APPROVED')) ||
+        (filtSt === 'PENDING' && (st === 'PENDING' || st === 'UNVERIFIED' || st === 'PENDING_ACTIVATION'));
 
       const matchCenter = instCenterFilter === 'All' || i.center === instCenterFilter;
 
@@ -145,7 +146,7 @@ export default function AdminDashboard({
       return matchSearch && matchStatus && matchCenter && matchCourse;
     }).map(i => ({
       ...i,
-      status: (i.status || 'ACTIVE').toUpperCase()
+      status: (i.status || 'PENDING').toUpperCase()
     }));
   };
 

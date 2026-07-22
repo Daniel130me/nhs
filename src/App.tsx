@@ -8,6 +8,16 @@ import InstructorPortal from './components/InstructorPortal';
 import AdminDashboard from './components/AdminDashboard';
 import StudentPortal from './components/StudentPortal';
 
+const normalizeStatus = (s: string | undefined): string => {
+  if (!s) return 'PENDING';
+  const u = s.toUpperCase();
+  if (u === 'ACTIVE' || u === 'APPROVED') return 'ACTIVE';
+  if (u === 'PENDING' || u === 'UNVERIFIED' || u === 'PENDING_ACTIVATION') return 'PENDING';
+  if (u === 'SUSPENDED' || u === 'DEACTIVATED') return 'SUSPENDED';
+  if (u === 'REJECTED') return 'REJECTED';
+  return u;
+};
+
 export default function App() {
   // ---- BROWSER PERSISTENT STATES (HYDRATED FROM NEON POSTGRES) ----
   const [config, setConfig] = useState<SystemConfig>(DEFAULT_CONFIG);
@@ -77,7 +87,7 @@ export default function App() {
             center: user.center || "Headquarters",
             courses: user.courses || [],
             role: (user.role === "ADMIN" || user.role === "SUPER_ADMIN") ? "Admin" : (user.role === "STUDENT" ? "Student" : "Instructor"),
-            status: user.status === "ACTIVE" ? "Active" : "Deactivated",
+            status: normalizeStatus(user.status),
             createdAt: user.createdAt || new Date().toISOString()
           };
           setCurrentInstructor(mapped);
@@ -175,7 +185,7 @@ export default function App() {
         center: user.center || "Headquarters",
         courses: user.courses || [],
         role: (user.role === "ADMIN" || user.role === "SUPER_ADMIN") ? "Admin" : (user.role === "STUDENT" ? "Student" : "Instructor"),
-        status: user.status === "ACTIVE" ? "Active" : "Deactivated",
+        status: normalizeStatus(user.status),
         createdAt: user.createdAt || new Date().toISOString()
       };
       setCurrentInstructor(mapped);
@@ -257,7 +267,7 @@ export default function App() {
       };
 
       setInstructors((prev) => [...prev, mapped]);
-      if (mapped.status === 'Active') {
+      if (mapped.status === 'ACTIVE' || mapped.status === 'Active') {
         setCurrentInstructor(mapped);
       }
       return mapped;

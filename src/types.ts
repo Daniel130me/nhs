@@ -28,7 +28,7 @@ export interface Instructor {
   center: string;
   courses: string[];
   role: 'Instructor' | 'Admin' | 'Student';
-  status?: 'Active' | 'Deactivated';
+  status?: 'Active' | 'Deactivated' | 'Pending' | 'Suspended' | 'ACTIVE' | 'PENDING' | 'SUSPENDED' | 'REJECTED' | string;
   createdAt: string;
 }
 

@@ -7,7 +7,7 @@ dotenv.config();
 const environmentSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().int().positive().default(3000),
-  DATABASE_URL: z.string().url("DATABASE_URL must be a valid connection URL"),
+  DATABASE_URL: z.string().optional().or(z.literal("")).default(process.env.DATABASE_URL || "postgres://postgres:postgres@localhost:5432/nhs_db"),
   FRONTEND_URL: z.string().url().optional().or(z.literal("")).default(process.env.APP_URL || "http://localhost:3000"),
   SESSION_SECRET: z.string().min(1).default("default-very-long-and-secure-session-secret-key-32-chars-at-least"),
   R2_ACCOUNT_ID: z.string().optional().or(z.literal("")),
