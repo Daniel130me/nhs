@@ -117,6 +117,38 @@ export default function AdminDashboard({
     onConfirm: () => void;
   } | null>(null);
 
+  const filterLocalInstructors = (list: any[]) => {
+    return list.filter(i => {
+      const fullName = `${i.firstName || ''} ${i.lastName || ''} ${i.email || ''}`.toLowerCase();
+      const matchSearch = !instructorSearch || fullName.includes(instructorSearch.toLowerCase());
+      
+      const st = String(i.status || 'ACTIVE').toUpperCase();
+      const filtSt = instStatusFilter.toUpperCase();
+      const matchStatus = instStatusFilter === 'All' || 
+        st === filtSt || 
+        (filtSt === 'SUSPENDED' && (st === 'DEACTIVATED' || st === 'SUSPENDED')) ||
+        (filtSt === 'ACTIVE' && (st === 'ACTIVE' || st === 'APPROVED'));
+
+      const matchCenter = instCenterFilter === 'All' || i.center === instCenterFilter;
+
+      let matchCourse = true;
+      if (instCourseFilter !== 'All') {
+        if (Array.isArray(i.courses)) {
+          matchCourse = i.courses.includes(instCourseFilter);
+        } else if (typeof i.courses === 'string') {
+          matchCourse = i.courses.toLowerCase().includes(instCourseFilter.toLowerCase());
+        } else {
+          matchCourse = false;
+        }
+      }
+
+      return matchSearch && matchStatus && matchCenter && matchCourse;
+    }).map(i => ({
+      ...i,
+      status: (i.status || 'ACTIVE').toUpperCase()
+    }));
+  };
+
   const fetchAdminInstructors = async () => {
     setInstLoading(true);
     setInstError('');
@@ -135,32 +167,15 @@ export default function AdminDashboard({
       }
       const resData = await response.json();
       const body = resData.data || resData;
-      const fetched = body.instructors || [];
-      if (fetched.length > 0) {
-        setDbInstructors(fetched);
+      if (body && Array.isArray(body.instructors)) {
+        setDbInstructors(body.instructors);
         setInstTotalPages(body.meta?.pages || 1);
       } else {
-        const filteredProps = instructors.filter(i => {
-          const matchSearch = !instructorSearch || `${i.firstName} ${i.lastName} ${i.email}`.toLowerCase().includes(instructorSearch.toLowerCase());
-          const matchCenter = instCenterFilter === 'All' || i.center === instCenterFilter;
-          return matchSearch && matchCenter;
-        }).map(i => ({
-          ...i,
-          status: (i.status || 'ACTIVE').toUpperCase()
-        }));
-        setDbInstructors(filteredProps);
+        setDbInstructors(filterLocalInstructors(instructors));
         setInstTotalPages(1);
       }
     } catch (err: any) {
-      const filteredProps = instructors.filter(i => {
-        const matchSearch = !instructorSearch || `${i.firstName} ${i.lastName} ${i.email}`.toLowerCase().includes(instructorSearch.toLowerCase());
-        const matchCenter = instCenterFilter === 'All' || i.center === instCenterFilter;
-        return matchSearch && matchCenter;
-      }).map(i => ({
-        ...i,
-        status: (i.status || 'ACTIVE').toUpperCase()
-      }));
-      setDbInstructors(filteredProps);
+      setDbInstructors(filterLocalInstructors(instructors));
       setInstTotalPages(1);
     } finally {
       setInstLoading(false);

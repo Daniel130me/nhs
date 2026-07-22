@@ -52,8 +52,13 @@ router.get(
     }
 
     if (status && status !== "All") {
-      params.push(status.toUpperCase());
-      sql += ` AND status = $${params.length}`;
+      const uStatus = status.toUpperCase();
+      if (uStatus === 'SUSPENDED' || uStatus === 'DEACTIVATED') {
+        sql += ` AND (UPPER(status) = 'SUSPENDED' OR UPPER(status) = 'DEACTIVATED')`;
+      } else {
+        params.push(uStatus);
+        sql += ` AND UPPER(status) = $${params.length}`;
+      }
     }
 
     if (center && center !== "All") {
