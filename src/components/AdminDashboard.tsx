@@ -162,7 +162,12 @@ export default function AdminDashboard({
         page: String(instPage),
         limit: '6'
       });
-      const response = await fetch(`/api/v1/admin/instructors?${queryParams.toString()}`);
+      const token = localStorage.getItem('nhs_token');
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      const response = await fetch(`/api/v1/admin/instructors?${queryParams.toString()}`, { headers });
       if (!response.ok) {
         throw new Error('Failed to load instructors from API');
       }
@@ -1135,7 +1140,7 @@ export default function AdminDashboard({
             ) : (
               <div className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {dbInstructors.map((inst) => {
+                  {dbInstructors.map((inst, instIdx) => {
                     const statusColors: any = {
                       PENDING: "bg-yellow-50 text-yellow-800 border-yellow-300",
                       ACTIVE: "bg-emerald-50 text-emerald-700 border-emerald-200",
@@ -1154,7 +1159,7 @@ export default function AdminDashboard({
 
                     return (
                       <div
-                        key={inst.id}
+                        key={inst.id ? `${inst.id}-${instIdx}` : instIdx}
                         className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col justify-between"
                       >
                         <div>
@@ -1181,8 +1186,8 @@ export default function AdminDashboard({
                               <span className="text-slate-400 block mb-1">Teaching Competencies:</span>
                               <div className="flex flex-wrap gap-1">
                                 {inst.courses && inst.courses.length > 0 ? (
-                                  inst.courses.map((c: string) => (
-                                    <span key={c} className="bg-slate-100 text-slate-600 text-[9px] px-1.5 py-0.5 rounded-md font-medium">
+                                  inst.courses.map((c: string, cIdx: number) => (
+                                    <span key={`${c}-${cIdx}`} className="bg-slate-100 text-slate-600 text-[9px] px-1.5 py-0.5 rounded-md font-medium">
                                       {c}
                                     </span>
                                   ))
@@ -1279,325 +1284,6 @@ export default function AdminDashboard({
             )}
           </motion.div>
         )}
-
-        {/* DETAILED INSTRUCTOR DRAWER */}
-        <AnimatePresence>
-          {isDetailDrawerOpen && selectedInstructor && (
-            <div className="fixed inset-0 z-50 overflow-hidden flex justify-end">
-              {/* Backdrop */}
-              <div
-                className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
-                onClick={() => setIsDetailDrawerOpen(false)}
-              />
-              
-              {/* Drawer container */}
-              <motion.div
-                initial={{ x: "100%" }}
-                animate={{ x: 0 }}
-                exit={{ x: "100%" }}
-                transition={{ type: "spring", damping: 25, stiffness: 200 }}
-                className="relative w-full max-w-lg bg-white h-full shadow-2xl flex flex-col z-10 border-l border-slate-200 overflow-y-auto"
-              >
-                {/* Header */}
-                <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-                  <div>
-                    <h3 className="text-base font-extrabold text-slate-900 font-display">Instructor Administration</h3>
-                    <p className="text-xs text-slate-400 mt-0.5">{selectedInstructor.email} • {selectedInstructor.center || 'Center not specified'}</p>
-                  </div>
-                  <button
-                    onClick={() => setIsDetailDrawerOpen(false)}
-                    className="w-8 h-8 rounded-full bg-white border border-slate-200 text-slate-400 hover:text-slate-600 flex items-center justify-center shadow-sm cursor-pointer text-lg font-bold"
-                  >
-                    &times;
-                  </button>
-                </div>
-
-                {/* Drawer Content */}
-                <div className="p-6 space-y-6 flex-1">
-                  {/* Pending Status Banner */}
-                  {selectedInstructor.status === 'PENDING' && (
-                    <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-xl flex flex-col gap-3">
-                      <div className="flex gap-2 items-start">
-                        <ShieldCheck className="w-5 h-5 text-yellow-600 shrink-0 mt-0.5" />
-                        <div>
-                          <h4 className="text-xs font-bold text-yellow-800">Pending Profile Activation</h4>
-                          <p className="text-[11px] text-yellow-700 mt-0.5">This instructor has registered and is waiting for administrator credentials verification.</p>
-                        </div>
-                      </div>
-                      <div className="flex gap-2.5 mt-1.5">
-                        <button
-                          onClick={() => handleApproveInstructor(selectedInstructor.id, `${selectedInstructor.firstName} ${selectedInstructor.lastName}`)}
-                          className="flex-1 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg py-1.5 transition-all cursor-pointer"
-                        >
-                          Approve Profile
-                        </button>
-                        <button
-                          onClick={() => handleRejectInstructor(selectedInstructor.id, `${selectedInstructor.firstName} ${selectedInstructor.lastName}`)}
-                          className="flex-1 text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white rounded-lg py-1.5 transition-all cursor-pointer"
-                        >
-                          Reject Profile
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Edit Form or Display Details */}
-                  {isEditingProfile ? (
-                    <div className="space-y-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
-                      <h4 className="text-xs font-bold text-slate-800 border-b border-slate-200 pb-2 mb-2">Edit Instructor Details</h4>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">First Name</label>
-                          <input
-                            type="text"
-                            value={editFirstName}
-                            onChange={(e) => setEditFirstName(e.target.value)}
-                            className="w-full text-xs border border-slate-200 rounded-lg p-2 bg-white"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Last Name</label>
-                          <input
-                            type="text"
-                            value={editLastName}
-                            onChange={(e) => setEditLastName(e.target.value)}
-                            className="w-full text-xs border border-slate-200 rounded-lg p-2 bg-white"
-                          />
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Gender</label>
-                        <select
-                          value={editGender}
-                          onChange={(e) => setEditGender(e.target.value)}
-                          className="w-full text-xs border border-slate-200 rounded-lg p-2 bg-white"
-                        >
-                          <option value="Male">Male</option>
-                          <option value="Female">Female</option>
-                          <option value="Prefer not to say">Prefer not to say</option>
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Center Scope</label>
-                        <select
-                          value={editCenter}
-                          onChange={(e) => setEditCenter(e.target.value)}
-                          className="w-full text-xs border border-slate-200 rounded-lg p-2 bg-white animate-none"
-                        >
-                          <option value="">Select Center...</option>
-                          {config.centers.map(center => (
-                            <option key={center} value={center}>{center}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Teaching Competencies</label>
-                        <div className="grid grid-cols-2 gap-2 mt-1 bg-white p-3 rounded-lg border border-slate-200 max-h-36 overflow-y-auto">
-                          {config.courses.flatMap(cat => cat.items).map(course => {
-                            const checked = editCourses.includes(course);
-                            return (
-                              <label key={course} className="flex items-center gap-2 text-xs font-medium text-slate-600 cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  checked={checked}
-                                  onChange={() => {
-                                    if (checked) {
-                                      setEditCourses(prev => prev.filter(c => c !== course));
-                                    } else {
-                                      setEditCourses(prev => [...prev, course]);
-                                    }
-                                  }}
-                                  className="accent-red-500 rounded"
-                                />
-                                {course}
-                              </label>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      <div className="flex gap-2.5 pt-2">
-                        <button
-                          onClick={() => handleSaveProfileEdit(selectedInstructor.id)}
-                          className="flex-1 text-xs font-bold bg-slate-900 text-white hover:bg-slate-800 rounded-lg py-2 transition-all cursor-pointer"
-                        >
-                          Save Profile
-                        </button>
-                        <button
-                          onClick={() => setIsEditingProfile(false)}
-                          className="flex-1 text-xs font-bold bg-slate-200 text-slate-700 hover:bg-slate-300 rounded-lg py-2 transition-all cursor-pointer"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {/* Basic details cards */}
-                      <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 relative">
-                        <button
-                          onClick={() => setIsEditingProfile(true)}
-                          className="absolute right-3 top-3 text-[10px] font-bold bg-white hover:bg-slate-100 border border-slate-200 rounded px-2.5 py-1 text-slate-600 transition-all cursor-pointer"
-                        >
-                          Edit Details
-                        </button>
-                        <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-3">Instructor Profile</h4>
-                        <div className="grid grid-cols-2 gap-y-3 gap-x-2 text-xs">
-                          <div>
-                            <span className="text-slate-400 block text-[10px]">Full Name</span>
-                            <span className="font-bold text-slate-800">{selectedInstructor.firstName} {selectedInstructor.lastName}</span>
-                          </div>
-                          <div>
-                            <span className="text-slate-400 block text-[10px]">Email Address</span>
-                            <span className="font-bold text-slate-800">{selectedInstructor.email}</span>
-                          </div>
-                          <div>
-                            <span className="text-slate-400 block text-[10px]">Gender</span>
-                            <span className="font-bold text-slate-800">{selectedInstructor.gender || "Not specified"}</span>
-                          </div>
-                          <div>
-                            <span className="text-slate-400 block text-[10px]">Center Assigned</span>
-                            <span className="font-bold text-slate-800">{selectedInstructor.center || "Not assigned"}</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Change Role Section */}
-                      <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                        <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-3">Administrative Role ({selectedInstructor.role})</h4>
-                        <div className="flex gap-2">
-                          {['INSTRUCTOR', 'ADMIN', 'SUPER_ADMIN'].map(r => (
-                            <button
-                              key={r}
-                              disabled={selectedInstructor.role === r}
-                              onClick={() => handleRoleChange(selectedInstructor.id, `${selectedInstructor.firstName} ${selectedInstructor.lastName}`, r)}
-                              className={`flex-1 text-[10px] font-bold py-1.5 rounded-lg border transition-all cursor-pointer ${
-                                selectedInstructor.role === r
-                                  ? 'bg-red-50 border-red-200 text-red-600 font-extrabold'
-                                  : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                              }`}
-                            >
-                              {r === 'INSTRUCTOR' ? 'Instructor' : r === 'ADMIN' ? 'Admin' : 'Super Admin'}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Status Management */}
-                      {selectedInstructor.status !== 'PENDING' && (
-                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 flex justify-between items-center">
-                          <div>
-                            <h4 className="text-xs font-bold text-slate-800">Account Access</h4>
-                            <p className="text-[10px] text-slate-400 mt-0.5">Toggle instructor system access credentials.</p>
-                          </div>
-                          <div>
-                            {String(selectedInstructor.status).toUpperCase() === 'ACTIVE' ? (
-                              <button
-                                onClick={() => handleStatusChange(selectedInstructor.id, `${selectedInstructor.firstName} ${selectedInstructor.lastName}`, 'SUSPENDED')}
-                                className="text-xs font-bold text-white bg-amber-500 hover:bg-amber-600 px-4 py-1.5 rounded-lg transition-all cursor-pointer"
-                              >
-                                Suspend Account
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() => handleStatusChange(selectedInstructor.id, `${selectedInstructor.firstName} ${selectedInstructor.lastName}`, 'ACTIVE')}
-                                className="text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 px-4 py-1.5 rounded-lg transition-all cursor-pointer"
-                              >
-                                Reactivate Account
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Delete Instructor Account Section */}
-                      <div className="bg-rose-50 p-4 rounded-xl border border-rose-100 flex justify-between items-center">
-                        <div>
-                          <h4 className="text-xs font-bold text-rose-800">Permanent Account Deletion</h4>
-                          <p className="text-[10px] text-rose-600 mt-0.5">Erase instructor account and all associated records permanently from system.</p>
-                        </div>
-                        <button
-                          onClick={() => handleDeleteInstructor(selectedInstructor.id, `${selectedInstructor.firstName} ${selectedInstructor.lastName}`)}
-                          className="text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 px-3.5 py-1.5 rounded-lg transition-all cursor-pointer shadow-sm active:scale-95 flex items-center gap-1.5"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          Delete Account
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Audit Logs / Activity History list inside drawer */}
-                  <div className="border-t border-slate-100 pt-5">
-                    <h4 className="text-xs font-bold text-slate-800 mb-3 flex items-center gap-1.5">
-                      <Activity className="w-4 h-4 text-slate-400" />
-                      Operational Audit History
-                    </h4>
-                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 max-h-48 overflow-y-auto space-y-2.5">
-                      <div className="flex gap-2 items-start text-[11px] text-slate-600">
-                        <span className="w-1.5 h-1.5 bg-red-500 rounded-full mt-1.5 shrink-0" />
-                        <div>
-                          <span className="font-semibold block text-slate-800">Profile Initial Registration</span>
-                          <span className="text-slate-400 text-[9px] block">Self-registration from login workspace portal</span>
-                        </div>
-                      </div>
-                      <div className="flex gap-2 items-start text-[11px] text-slate-600">
-                        <span className="w-1.5 h-1.5 bg-slate-400 rounded-full mt-1.5 shrink-0" />
-                        <div>
-                          <span className="font-semibold block text-slate-800">Competency Verification Checklist</span>
-                          <span className="text-slate-400 text-[9px] block">Assigned and calibrated by centers coordinator</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-            </div>
-          )}
-        </AnimatePresence>
-
-        {/* CONFIRMATION OVERLAY MODAL */}
-        <AnimatePresence>
-          {confirmationModal && confirmationModal.isOpen && (
-            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-              <div
-                className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
-                onClick={() => setConfirmationModal(null)}
-              />
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                className="relative bg-white max-w-sm w-full rounded-2xl p-6 shadow-2xl border border-slate-200 z-10"
-              >
-                <h3 className="text-sm font-extrabold text-slate-900 font-display flex items-center gap-2 mb-2">
-                  <ShieldCheck className="w-5 h-5 text-red-500" />
-                  {confirmationModal.title}
-                </h3>
-                <p className="text-xs text-slate-500 leading-relaxed mb-6">{confirmationModal.message}</p>
-                <div className="flex gap-3 justify-end">
-                  <button
-                    onClick={() => setConfirmationModal(null)}
-                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg transition-all cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={() => {
-                      confirmationModal.onConfirm();
-                    }}
-                    className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-lg transition-all cursor-pointer"
-                  >
-                    Confirm
-                  </button>
-                </div>
-              </motion.div>
-            </div>
-          )}
-        </AnimatePresence>
 
         {/* STUDENT SURVEYS TAB */}
         {adminTab === 'Surveys' && (
@@ -2703,6 +2389,325 @@ export default function AdminDashboard({
               </div>
             )}
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* DETAILED INSTRUCTOR DRAWER */}
+      <AnimatePresence>
+        {isDetailDrawerOpen && selectedInstructor && (
+          <div className="fixed inset-0 z-50 overflow-hidden flex justify-end">
+            {/* Backdrop */}
+            <div
+              className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+              onClick={() => setIsDetailDrawerOpen(false)}
+            />
+            
+            {/* Drawer container */}
+            <motion.div
+              initial={{ x: "100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "100%" }}
+              transition={{ type: "spring", damping: 25, stiffness: 200 }}
+              className="relative w-full max-w-lg bg-white h-full shadow-2xl flex flex-col z-10 border-l border-slate-200 overflow-y-auto"
+            >
+              {/* Header */}
+              <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+                <div>
+                  <h3 className="text-base font-extrabold text-slate-900 font-display">Instructor Administration</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">{selectedInstructor.email} • {selectedInstructor.center || 'Center not specified'}</p>
+                </div>
+                <button
+                  onClick={() => setIsDetailDrawerOpen(false)}
+                  className="w-8 h-8 rounded-full bg-white border border-slate-200 text-slate-400 hover:text-slate-600 flex items-center justify-center shadow-sm cursor-pointer text-lg font-bold"
+                >
+                  &times;
+                </button>
+              </div>
+
+              {/* Drawer Content */}
+              <div className="p-6 space-y-6 flex-1">
+                {/* Pending Status Banner */}
+                {selectedInstructor.status === 'PENDING' && (
+                  <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-xl flex flex-col gap-3">
+                    <div className="flex gap-2 items-start">
+                      <ShieldCheck className="w-5 h-5 text-yellow-600 shrink-0 mt-0.5" />
+                      <div>
+                        <h4 className="text-xs font-bold text-yellow-800">Pending Profile Activation</h4>
+                        <p className="text-[11px] text-yellow-700 mt-0.5">This instructor has registered and is waiting for administrator credentials verification.</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-2.5 mt-1.5">
+                      <button
+                        onClick={() => handleApproveInstructor(selectedInstructor.id, `${selectedInstructor.firstName} ${selectedInstructor.lastName}`)}
+                        className="flex-1 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg py-1.5 transition-all cursor-pointer"
+                      >
+                        Approve Profile
+                      </button>
+                      <button
+                        onClick={() => handleRejectInstructor(selectedInstructor.id, `${selectedInstructor.firstName} ${selectedInstructor.lastName}`)}
+                        className="flex-1 text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white rounded-lg py-1.5 transition-all cursor-pointer"
+                      >
+                        Reject Profile
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Edit Form or Display Details */}
+                {isEditingProfile ? (
+                  <div className="space-y-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                    <h4 className="text-xs font-bold text-slate-800 border-b border-slate-200 pb-2 mb-2">Edit Instructor Details</h4>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">First Name</label>
+                        <input
+                          type="text"
+                          value={editFirstName}
+                          onChange={(e) => setEditFirstName(e.target.value)}
+                          className="w-full text-xs border border-slate-200 rounded-lg p-2 bg-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Last Name</label>
+                        <input
+                          type="text"
+                          value={editLastName}
+                          onChange={(e) => setEditLastName(e.target.value)}
+                          className="w-full text-xs border border-slate-200 rounded-lg p-2 bg-white"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Gender</label>
+                      <select
+                        value={editGender}
+                        onChange={(e) => setEditGender(e.target.value)}
+                        className="w-full text-xs border border-slate-200 rounded-lg p-2 bg-white"
+                      >
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                        <option value="Prefer not to say">Prefer not to say</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Center Scope</label>
+                      <select
+                        value={editCenter}
+                        onChange={(e) => setEditCenter(e.target.value)}
+                        className="w-full text-xs border border-slate-200 rounded-lg p-2 bg-white animate-none"
+                      >
+                        <option value="">Select Center...</option>
+                        {config.centers.map(center => (
+                          <option key={center} value={center}>{center}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Teaching Competencies</label>
+                      <div className="grid grid-cols-2 gap-2 mt-1 bg-white p-3 rounded-lg border border-slate-200 max-h-36 overflow-y-auto">
+                        {config.courses.flatMap(cat => cat.items).map(course => {
+                          const checked = editCourses.includes(course);
+                          return (
+                            <label key={course} className="flex items-center gap-2 text-xs font-medium text-slate-600 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => {
+                                  if (checked) {
+                                    setEditCourses(prev => prev.filter(c => c !== course));
+                                  } else {
+                                    setEditCourses(prev => [...prev, course]);
+                                  }
+                                }}
+                                className="accent-red-500 rounded"
+                              />
+                              {course}
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2.5 pt-2">
+                      <button
+                        onClick={() => handleSaveProfileEdit(selectedInstructor.id)}
+                        className="flex-1 text-xs font-bold bg-slate-900 text-white hover:bg-slate-800 rounded-lg py-2 transition-all cursor-pointer"
+                      >
+                        Save Profile
+                      </button>
+                      <button
+                        onClick={() => setIsEditingProfile(false)}
+                        className="flex-1 text-xs font-bold bg-slate-200 text-slate-700 hover:bg-slate-300 rounded-lg py-2 transition-all cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {/* Basic details cards */}
+                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 relative">
+                      <button
+                        onClick={() => setIsEditingProfile(true)}
+                        className="absolute right-3 top-3 text-[10px] font-bold bg-white hover:bg-slate-100 border border-slate-200 rounded px-2.5 py-1 text-slate-600 transition-all cursor-pointer"
+                      >
+                        Edit Details
+                      </button>
+                      <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-3">Instructor Profile</h4>
+                      <div className="grid grid-cols-2 gap-y-3 gap-x-2 text-xs">
+                        <div>
+                          <span className="text-slate-400 block text-[10px]">Full Name</span>
+                          <span className="font-bold text-slate-800">{selectedInstructor.firstName} {selectedInstructor.lastName}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block text-[10px]">Email Address</span>
+                          <span className="font-bold text-slate-800">{selectedInstructor.email}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block text-[10px]">Gender</span>
+                          <span className="font-bold text-slate-800">{selectedInstructor.gender || "Not specified"}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block text-[10px]">Center Assigned</span>
+                          <span className="font-bold text-slate-800">{selectedInstructor.center || "Not assigned"}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Change Role Section */}
+                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                      <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-3">Administrative Role ({selectedInstructor.role})</h4>
+                      <div className="flex gap-2">
+                        {['INSTRUCTOR', 'ADMIN', 'SUPER_ADMIN'].map(r => (
+                          <button
+                            key={r}
+                            disabled={selectedInstructor.role === r}
+                            onClick={() => handleRoleChange(selectedInstructor.id, `${selectedInstructor.firstName} ${selectedInstructor.lastName}`, r)}
+                            className={`flex-1 text-[10px] font-bold py-1.5 rounded-lg border transition-all cursor-pointer ${
+                              selectedInstructor.role === r
+                                ? 'bg-red-50 border-red-200 text-red-600 font-extrabold'
+                                : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                            }`}
+                          >
+                            {r === 'INSTRUCTOR' ? 'Instructor' : r === 'ADMIN' ? 'Admin' : 'Super Admin'}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Status Management */}
+                    {selectedInstructor.status !== 'PENDING' && (
+                      <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 flex justify-between items-center">
+                        <div>
+                          <h4 className="text-xs font-bold text-slate-800">Account Access</h4>
+                          <p className="text-[10px] text-slate-400 mt-0.5">Toggle instructor system access credentials.</p>
+                        </div>
+                        <div>
+                          {String(selectedInstructor.status).toUpperCase() === 'ACTIVE' ? (
+                            <button
+                              onClick={() => handleStatusChange(selectedInstructor.id, `${selectedInstructor.firstName} ${selectedInstructor.lastName}`, 'SUSPENDED')}
+                              className="text-xs font-bold text-white bg-amber-500 hover:bg-amber-600 px-4 py-1.5 rounded-lg transition-all cursor-pointer"
+                            >
+                              Suspend Account
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleStatusChange(selectedInstructor.id, `${selectedInstructor.firstName} ${selectedInstructor.lastName}`, 'ACTIVE')}
+                              className="text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 px-4 py-1.5 rounded-lg transition-all cursor-pointer"
+                            >
+                              Reactivate Account
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Delete Instructor Account Section */}
+                    <div className="bg-rose-50 p-4 rounded-xl border border-rose-100 flex justify-between items-center">
+                      <div>
+                        <h4 className="text-xs font-bold text-rose-800">Permanent Account Deletion</h4>
+                        <p className="text-[10px] text-rose-600 mt-0.5">Erase instructor account and all associated records permanently from system.</p>
+                      </div>
+                      <button
+                        onClick={() => handleDeleteInstructor(selectedInstructor.id, `${selectedInstructor.firstName} ${selectedInstructor.lastName}`)}
+                        className="text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 px-3.5 py-1.5 rounded-lg transition-all cursor-pointer shadow-sm active:scale-95 flex items-center gap-1.5"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        Delete Account
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Audit Logs / Activity History list inside drawer */}
+                <div className="border-t border-slate-100 pt-5">
+                  <h4 className="text-xs font-bold text-slate-800 mb-3 flex items-center gap-1.5">
+                    <Activity className="w-4 h-4 text-slate-400" />
+                    Operational Audit History
+                  </h4>
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 max-h-48 overflow-y-auto space-y-2.5">
+                    <div className="flex gap-2 items-start text-[11px] text-slate-600">
+                      <span className="w-1.5 h-1.5 bg-red-500 rounded-full mt-1.5 shrink-0" />
+                      <div>
+                        <span className="font-semibold block text-slate-800">Profile Initial Registration</span>
+                        <span className="text-slate-400 text-[9px] block">Self-registration from login workspace portal</span>
+                      </div>
+                    </div>
+                    <div className="flex gap-2 items-start text-[11px] text-slate-600">
+                      <span className="w-1.5 h-1.5 bg-slate-400 rounded-full mt-1.5 shrink-0" />
+                      <div>
+                        <span className="font-semibold block text-slate-800">Competency Verification Checklist</span>
+                        <span className="text-slate-400 text-[9px] block">Assigned and calibrated by centers coordinator</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* CONFIRMATION OVERLAY MODAL */}
+      <AnimatePresence>
+        {confirmationModal && confirmationModal.isOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <div
+              className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+              onClick={() => setConfirmationModal(null)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="relative bg-white max-w-sm w-full rounded-2xl p-6 shadow-2xl border border-slate-200 z-10"
+            >
+              <h3 className="text-sm font-extrabold text-slate-900 font-display flex items-center gap-2 mb-2">
+                <ShieldCheck className="w-5 h-5 text-red-500" />
+                {confirmationModal.title}
+              </h3>
+              <p className="text-xs text-slate-500 leading-relaxed mb-6">{confirmationModal.message}</p>
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => setConfirmationModal(null)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg transition-all cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    confirmationModal.onConfirm();
+                  }}
+                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-lg transition-all cursor-pointer"
+                >
+                  Confirm
+                </button>
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </div>

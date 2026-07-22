@@ -54,14 +54,14 @@ router.get(
     if (status && status !== "All") {
       const uStatus = status.toUpperCase();
       if (uStatus === 'SUSPENDED' || uStatus === 'DEACTIVATED') {
-        sql += ` AND (UPPER(status) = 'SUSPENDED' OR UPPER(status) = 'DEACTIVATED')`;
+        sql += ` AND (UPPER(status::text) = 'SUSPENDED' OR UPPER(status::text) = 'DEACTIVATED')`;
       } else if (uStatus === 'ACTIVE' || uStatus === 'APPROVED') {
-        sql += ` AND (UPPER(status) = 'ACTIVE' OR UPPER(status) = 'APPROVED')`;
+        sql += ` AND (UPPER(status::text) = 'ACTIVE' OR UPPER(status::text) = 'APPROVED')`;
       } else if (uStatus === 'PENDING' || uStatus === 'PENDING_APPROVAL') {
-        sql += ` AND (UPPER(status) = 'PENDING' OR UPPER(status) = 'PENDING_APPROVAL' OR UPPER(status) = 'PENDING_ACTIVATION' OR UPPER(status) = 'UNVERIFIED')`;
+        sql += ` AND (UPPER(status::text) = 'PENDING' OR UPPER(status::text) = 'PENDING_APPROVAL' OR UPPER(status::text) = 'PENDING_ACTIVATION' OR UPPER(status::text) = 'UNVERIFIED')`;
       } else {
         params.push(uStatus);
-        sql += ` AND UPPER(status) = $${params.length}`;
+        sql += ` AND UPPER(status::text) = $${params.length}`;
       }
     }
 

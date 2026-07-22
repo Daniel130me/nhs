@@ -12,7 +12,7 @@ const normalizeStatus = (s: string | undefined): string => {
   if (!s) return 'PENDING';
   const u = s.toUpperCase();
   if (u === 'ACTIVE' || u === 'APPROVED') return 'ACTIVE';
-  if (u === 'PENDING' || u === 'UNVERIFIED' || u === 'PENDING_ACTIVATION') return 'PENDING';
+  if (u === 'PENDING' || u === 'UNVERIFIED' || u === 'PENDING_ACTIVATION' || u === 'PENDING_APPROVAL' || u === 'PENDING APPROVAL') return 'PENDING';
   if (u === 'SUSPENDED' || u === 'DEACTIVATED') return 'SUSPENDED';
   if (u === 'REJECTED') return 'REJECTED';
   return u;
@@ -262,7 +262,7 @@ export default function App() {
         center: user.center || "Headquarters",
         courses: user.courses || [],
         role: (user.role === "ADMIN" || user.role === "SUPER_ADMIN") ? "Admin" : (user.role === "STUDENT" ? "Student" : "Instructor"),
-        status: user.status === "ACTIVE" ? "Active" : "Deactivated",
+        status: normalizeStatus(user.status),
         createdAt: user.createdAt || new Date().toISOString()
       };
 
