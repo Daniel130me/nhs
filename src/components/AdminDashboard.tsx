@@ -973,21 +973,17 @@ export default function AdminDashboard({
                       <p className="text-[10px] text-slate-400 mt-0.5 truncate">{instructor.center} | {instructor.classCount} classes</p>
                       
                       {/* Secure Status Toggle Button */}
-                      {onUpdateInstructorStatus && (
-                        <button
-                          onClick={() => {
-                            const newStatus = instructor.status === 'Active' ? 'Deactivated' : 'Active';
-                            if (confirm(`Are you sure you want to set ${instructor.name} to ${newStatus}?`)) {
-                              onUpdateInstructorStatus(instructor.id, newStatus);
-                            }
-                          }}
-                          className={`text-[9px] font-extrabold mt-1 uppercase cursor-pointer hover:underline transition-all ${
-                            instructor.status === 'Active' ? 'text-red-600 hover:text-red-500' : 'text-emerald-600 hover:text-emerald-500'
-                          }`}
-                        >
-                          {instructor.status === 'Active' ? 'Deactivate Account' : 'Activate Account'}
-                        </button>
-                      )}
+                      <button
+                        onClick={() => {
+                          const isAct = String(instructor.status).toUpperCase() === 'ACTIVE';
+                          handleStatusChange(instructor.id, instructor.name, isAct ? 'SUSPENDED' : 'ACTIVE');
+                        }}
+                        className={`text-[9px] font-extrabold mt-1 uppercase cursor-pointer hover:underline transition-all ${
+                          String(instructor.status).toUpperCase() === 'ACTIVE' ? 'text-red-600 hover:text-red-500' : 'text-emerald-600 hover:text-emerald-500'
+                        }`}
+                      >
+                        {String(instructor.status).toUpperCase() === 'ACTIVE' ? 'Deactivate Account' : 'Activate Account'}
+                      </button>
                     </div>
                     <div className="text-right shrink-0">
                       <span className="block font-extrabold font-display text-slate-900 text-sm">{instructor.hours} hrs</span>
@@ -1419,7 +1415,7 @@ export default function AdminDashboard({
                             <p className="text-[10px] text-slate-400 mt-0.5">Toggle instructor system access credentials.</p>
                           </div>
                           <div>
-                            {selectedInstructor.status === 'ACTIVE' ? (
+                            {String(selectedInstructor.status).toUpperCase() === 'ACTIVE' ? (
                               <button
                                 onClick={() => handleStatusChange(selectedInstructor.id, `${selectedInstructor.firstName} ${selectedInstructor.lastName}`, 'SUSPENDED')}
                                 className="text-xs font-bold text-white bg-amber-500 hover:bg-amber-600 px-4 py-1.5 rounded-lg transition-all cursor-pointer"
