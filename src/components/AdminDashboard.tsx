@@ -203,7 +203,8 @@ export default function AdminDashboard({
           lastName: resObj.lastName || '',
           email: resObj.email || '',
           studentNumber: resObj.studentNumber || '',
-          activationToken: resObj.activationToken
+          activationToken: resObj.activationToken,
+          isReinvite: true
         });
       } else {
         alert("New student invitation generated successfully!");
@@ -211,6 +212,42 @@ export default function AdminDashboard({
       fetchAdminStudents();
     } catch (err: any) {
       alert(err.message || 'Failed to re-invite student');
+    }
+  };
+
+  const handleToggleStudentStatus = async (id: string, currentStatus: string) => {
+    try {
+      const isActivating = String(currentStatus).toUpperCase() !== 'ACTIVE';
+      const targetStatus = isActivating ? 'ACTIVE' : 'SUSPENDED';
+      const token = localStorage.getItem('nhs_token');
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      let res;
+      if (isActivating) {
+        res = await fetch(`/api/v1/admin/students/${id}/approve`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ reason: 'Admin activation' })
+        });
+      } else {
+        res = await fetch(`/api/v1/admin/students/${id}/status`, {
+          method: 'PATCH',
+          headers,
+          body: JSON.stringify({ status: targetStatus, reason: 'Admin status update' })
+        });
+      }
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || 'Failed to update student status');
+      }
+      setDbStudents(prev => prev.map(s => s.id === id ? { ...s, status: isActivating ? 'ACTIVE' : targetStatus } : s));
+      alert(`Student account status updated to ${isActivating ? 'ACTIVE' : targetStatus} successfully.`);
+      fetchAdminStudents();
+    } catch (err: any) {
+      alert(err.message || 'Failed to update student status');
     }
   };
 
@@ -1510,6 +1547,16 @@ export default function AdminDashboard({
                           </td>
                           <td className="py-3.5 px-4 text-slate-500">{stu.phone || 'No phone'}</td>
                           <td className="py-3.5 px-4 text-right space-x-2">
+                            <button
+                              onClick={() => handleToggleStudentStatus(stu.id, stu.status)}
+                              className={`px-2.5 py-1 font-semibold text-[11px] rounded-lg transition-all cursor-pointer ${
+                                String(stu.status).toUpperCase() === 'ACTIVE'
+                                  ? 'bg-amber-50 hover:bg-amber-100 text-amber-700'
+                                  : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                              }`}
+                            >
+                              {String(stu.status).toUpperCase() === 'ACTIVE' ? 'Suspend' : 'Activate Account'}
+                            </button>
                             <button
                               onClick={() => handleReinviteStudent(stu.id)}
                               className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-[11px] rounded-lg transition-all cursor-pointer"
@@ -3112,12 +3159,14 @@ export default function AdminDashboard({
               <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto">
                 <CheckCircle2 className="w-6 h-6" />
               </div>
-              <h3 className="text-base font-extrabold text-slate-900 font-display">Student Created Successfully!</h3>
+              <h3 className="text-base font-extrabold text-slate-900 font-display">
+                {createdStudentResult.isReinvite ? "Password Reset Successfully!" : "Student Created Successfully!"}
+              </h3>
               <p className="text-xs text-slate-500">
-                Share this activation code with <strong className="text-slate-800">{createdStudentResult.firstName} {createdStudentResult.lastName}</strong> ({createdStudentResult.email}). They can use it to activate their portal account.
+                Share this auto-generated password with <strong className="text-slate-800">{createdStudentResult.firstName} {createdStudentResult.lastName}</strong> ({createdStudentResult.email}). They can use it to login to their portal account.
               </p>
 
-              <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl font-mono text-xs text-slate-800 break-all select-all font-bold">
+              <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl font-mono text-2xl tracking-[0.2em] text-slate-800 break-all select-all font-bold">
                 {createdStudentResult.activationToken}
               </div>
 
@@ -3125,11 +3174,11 @@ export default function AdminDashboard({
                 <button
                   onClick={() => {
                     navigator.clipboard.writeText(createdStudentResult.activationToken);
-                    alert("Activation code copied to clipboard!");
+                    alert("Password copied to clipboard!");
                   }}
                   className="w-full py-2.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl transition-all cursor-pointer shadow-sm mb-2"
                 >
-                  Copy Activation Code
+                  Copy Password
                 </button>
                 <button
                   onClick={() => setCreatedStudentResult(null)}

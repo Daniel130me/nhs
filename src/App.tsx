@@ -44,6 +44,7 @@ export default function App() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+
     const code = params.get('verify');
     if (code) {
       setUrlVerificationCode(code);
@@ -727,7 +728,7 @@ export default function App() {
               }`}
             >
               <ShieldCheck className="w-3.5 h-3.5" />
-              Staff Portal
+              Login
             </button>
           </div>
         </div>

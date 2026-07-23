@@ -586,10 +586,10 @@ export default function InstructorPortal({
             NH
           </div>
           <h3 className="text-lg font-bold font-display uppercase tracking-widest leading-none">
-            {isRegistering ? 'Register Instructor Account' : 'Secure Staff Login'}
+            {isRegistering ? 'Register Instructor Account' : 'Portal Login'}
           </h3>
           <p className="text-slate-400 text-[10px] uppercase tracking-wider mt-2">
-            New Horizons Computer Learning Centers • Operations Portal
+            New Horizons Computer Learning Centers
           </p>
         </div>
 
@@ -609,22 +609,21 @@ export default function InstructorPortal({
           )}
 
           {!isRegistering ? (
-            /* SECURE LOGIN FORM */
+            /* LOGIN FORM */
             <form onSubmit={handleLoginSubmit} className="space-y-4">
               <div>
-                <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wide mb-1.5">Authorized Email</label>
+                <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wide mb-1.5">Email Address</label>
                 <input
                   type="email"
                   required
-                  placeholder="e.g. instructor@newhorizons.com"
+                  placeholder="e.g. user@newhorizons.com"
                   value={emailInput}
                   onChange={(e) => setEmailInput(e.target.value)}
                   className="w-full p-2.5 border border-slate-300 rounded-xl text-xs text-slate-800 focus:outline-none focus:border-red-500"
                 />
               </div>
-
               <div>
-                <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wide mb-1.5">Portal Password</label>
+                <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wide mb-1.5">Password</label>
                 <input
                   type="password"
                   required
@@ -634,11 +633,10 @@ export default function InstructorPortal({
                   className="w-full p-2.5 border border-slate-300 rounded-xl text-xs text-slate-800 focus:outline-none focus:border-red-500"
                 />
               </div>
-
               <button
                 type="submit"
                 disabled={isAuthLoading}
-                className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-500 text-white font-extrabold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-500 text-white font-extrabold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm mt-4"
               >
                 {isAuthLoading ? (
                   <>
@@ -646,18 +644,17 @@ export default function InstructorPortal({
                   </>
                 ) : (
                   <>
-                    <LogIn className="w-4 h-4" /> Sign In to Workspace
+                    <LogIn className="w-4 h-4" /> Sign In
                   </>
                 )}
               </button>
-
               <div className="text-center pt-4 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setIsRegistering(true)}
                   className="text-xs font-bold text-slate-600 hover:text-red-500 transition-colors cursor-pointer"
                 >
-                  Request Staff Workspace Account
+                  Apply for Instructor Account
                 </button>
               </div>
             </form>

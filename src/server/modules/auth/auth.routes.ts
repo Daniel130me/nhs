@@ -539,7 +539,7 @@ router.post(
       // Update user password and set active status (email verified will happen on verification token accept)
       await query(
         `UPDATE users 
-         SET password_hash = $1, is_password_migrated = TRUE, updated_at = NOW() 
+         SET password_hash = $1, is_password_migrated = TRUE, status = 'ACTIVE', updated_at = NOW() 
          WHERE id = $2`,
         [passwordHash, user.id]
       );

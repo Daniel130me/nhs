@@ -540,15 +540,21 @@ async function createAndInviteStudentTx(
 
   const finalStudentNumber = data.studentNumber || "NHS-STU-" + Date.now().toString().slice(-6) + "-" + Math.floor(1000 + Math.random() * 9000);
   const userId = crypto.randomUUID();
-  const tempHash = await argon2.hash(crypto.randomBytes(32).toString("hex"), { type: argon2.argon2id });
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let password = "";
+  const bytes = crypto.randomBytes(6);
+  for (let i = 0; i < 6; i++) {
+    password += chars[bytes[i] % chars.length];
+  }
+  const passwordHash = await argon2.hash(password, { type: argon2.argon2id });
 
   await query("BEGIN");
   try {
     // Insert into users
     await query(
       `INSERT INTO users (id, first_name, last_name, email, password_hash, role, status, center, gender, is_password_migrated)
-       VALUES ($1, $2, $3, $4, $5, 'STUDENT', 'PENDING', $6, $7, TRUE)`,
-      [userId, data.firstName, data.lastName, normalizedEmail, tempHash, centerName, data.gender || null]
+       VALUES ($1, $2, $3, $4, $5, 'STUDENT', 'ACTIVE', $6, $7, TRUE)`,
+      [userId, data.firstName, data.lastName, normalizedEmail, passwordHash, centerName, data.gender || null]
     );
 
     // Insert into student_profiles
@@ -558,25 +564,9 @@ async function createAndInviteStudentTx(
       [userId, finalStudentNumber, centreUuid, data.phone || null]
     );
 
-    // Create invitation (6-character activation code)
-    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-    let rawToken = "";
-    const bytes = crypto.randomBytes(6);
-    for (let i = 0; i < 6; i++) {
-      rawToken += chars[bytes[i] % chars.length];
-    }
-    const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
-
-    await query(
-      `INSERT INTO user_invitations (email, role, token_hash, invited_by, expires_at)
-       VALUES ($1, 'STUDENT', $2, $3, $4)`,
-      [normalizedEmail, tokenHash, adminId, expiresAt]
-    );
-
-    // Send email
-    await emailService.sendInvitation(normalizedEmail, rawToken, "STUDENT", adminEmail);
-
+    
+    // Return generated password as activation token for backward compatibility in UI
+    const rawToken = password;
     await query("COMMIT");
 
     return {
@@ -725,16 +715,11 @@ router.post(
     for (let i = 0; i < 6; i++) {
       rawToken += chars[bytes[i] % chars.length];
     }
-    const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
-
+    const passwordHash = await argon2.hash(rawToken, { type: argon2.argon2id });
     await query(
-      `INSERT INTO user_invitations (email, role, token_hash, invited_by, expires_at)
-       VALUES ($1, 'STUDENT', $2, $3, $4)`,
-      [student.email, tokenHash, req.user!.id, expiresAt]
+      `UPDATE users SET password_hash = $1, status = 'ACTIVE' WHERE id = $2`,
+      [passwordHash, id]
     );
-
-    await emailService.sendInvitation(student.email, rawToken, "STUDENT", req.user!.email);
 
     await logAudit({
       req,
@@ -744,7 +729,113 @@ router.post(
       metadata: { email: student.email }
     });
 
-    return sendSuccess(res, { success: true }, "Invitation generated and sent successfully");
+    return sendSuccess(
+      res, 
+      { 
+        success: true, 
+        activationToken: rawToken,
+        firstName: student.first_name,
+        lastName: student.last_name,
+        email: student.email
+      }, 
+      "Invitation generated and sent successfully"
+    );
+  })
+);
+
+// POST /api/v1/admin/students/:id/approve
+router.post(
+  "/students/:id/approve",
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { reason } = req.body;
+
+    const students = await query<any>(
+      "SELECT id, status, email FROM users WHERE id = $1 AND role = 'STUDENT' AND deleted_at IS NULL",
+      [id]
+    );
+    if (students.length === 0) {
+      throw new NotFoundError("Student user not found.");
+    }
+
+    const currentStatus = students[0].status;
+    if (currentStatus === "ACTIVE") {
+      return sendSuccess(res, { success: true }, "Student account is already Active.");
+    }
+
+    await query("UPDATE users SET status = 'ACTIVE', updated_at = NOW() WHERE id = $1", [id]);
+
+    await createNotification(
+      id,
+      "ACCOUNT_APPROVAL",
+      "Account Approved",
+      "Your student account has been approved by the administrator. You can now log in and access your student portal.",
+      "/student-portal"
+    );
+
+    await logAudit({
+      req,
+      action: "Student approval",
+      entityType: "user",
+      entityId: id,
+      oldValues: { status: currentStatus },
+      newValues: { status: "ACTIVE" },
+      metadata: { reason }
+    });
+
+    return sendSuccess(res, { success: true, status: "ACTIVE" }, "Student approved successfully.");
+  })
+);
+
+// PATCH /api/v1/admin/students/:id/status
+router.patch(
+  "/students/:id/status",
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { status, reason } = req.body;
+
+    if (!status) {
+      throw new BadRequestError("Status is required.");
+    }
+
+    const newStatus = status.toUpperCase();
+    const validStatuses = ["PENDING", "ACTIVE", "SUSPENDED", "REJECTED"];
+    if (!validStatuses.includes(newStatus)) {
+      throw new BadRequestError(`Invalid status. Must be one of: ${validStatuses.join(", ")}`);
+    }
+
+    const students = await query<any>(
+      "SELECT id, status, email FROM users WHERE id = $1 AND role = 'STUDENT' AND deleted_at IS NULL",
+      [id]
+    );
+    if (students.length === 0) {
+      throw new NotFoundError("Student user not found.");
+    }
+
+    const user = students[0];
+    const currentStatus = user.status;
+
+    if (currentStatus === newStatus) {
+      return sendSuccess(res, { success: true }, `Status is already ${newStatus}`);
+    }
+
+    await query("UPDATE users SET status = $1, updated_at = NOW() WHERE id = $2", [newStatus, id]);
+
+    if (newStatus === "SUSPENDED" || newStatus === "REJECTED") {
+      await query(`DELETE FROM "session" WHERE sess::text LIKE $1`, [`%"userId":"${id}"%`]);
+    }
+
+    await logAudit({
+      req,
+      action: `Student status update to ${newStatus}`,
+      entityType: "user",
+      entityId: id,
+      oldValues: { status: currentStatus },
+      newValues: { status: newStatus },
+      metadata: { reason }
+    });
+
+    return sendSuccess(res, { success: true, status: newStatus }, `Student status updated to ${newStatus} successfully.`);
   })
 );
 

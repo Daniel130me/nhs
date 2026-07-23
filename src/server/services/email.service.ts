@@ -14,14 +14,12 @@ export class ConsoleEmailService implements EmailService {
   }
 
   async sendInvitation(email: string, token: string, role: string, invitedBy: string): Promise<void> {
-    const baseUrl = this.getBaseUrl();
     const isProd = process.env.NODE_ENV === "production";
-    const maskedToken = isProd ? "[REDACTED_TOKEN_PROD]" : token;
-    const url = `${baseUrl}/accept-invitation?token=${maskedToken}`;
+    const maskedToken = isProd ? "[REDACTED_PASSWORD_PROD]" : token;
 
-    logger.info(`[EmailService] Sending invitation email to ${email}`);
-    logger.info(`[EmailService] Role: ${role}, Invited By: ${invitedBy}`);
-    logger.info(`[EmailService] Preview Link: ${url}`);
+    logger.info(`[EmailService] Sending account credentials email to ${email}`);
+    logger.info(`[EmailService] Role: ${role}, Created By: ${invitedBy}`);
+    logger.info(`[EmailService] Auto-generated Password: ${maskedToken}`);
   }
 
   async sendPasswordReset(email: string, token: string): Promise<void> {
