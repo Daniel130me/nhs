@@ -413,30 +413,39 @@ export default function InstructorDashboardView({
             </div>
           </div>
 
-          {/* INSTRUCTOR COMPETENCY STATUS */}
-          <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-4">
-            <div className="border-b border-slate-100 pb-3 flex justify-between items-center">
-              <h4 className="font-bold text-slate-900 text-xs uppercase tracking-wide flex items-center gap-1.5">
-                <Award className="w-4 h-4 text-yellow-500" />
-                Your Certifications
-              </h4>
-              <span className="text-[9px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">Approved</span>
-            </div>
+          {/* ASSIGNED COURSES */}
+          {(() => {
+            const assignedCourses = Array.isArray(currentInstructor.courses)
+              ? currentInstructor.courses
+              : (typeof currentInstructor.courses === 'string'
+                  ? (() => { try { const p = JSON.parse(currentInstructor.courses); return Array.isArray(p) ? p : [currentInstructor.courses]; } catch { return currentInstructor.courses ? [currentInstructor.courses] : []; } })()
+                  : []);
+            return (
+              <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-4">
+                <div className="border-b border-slate-100 pb-3 flex justify-between items-center">
+                  <h4 className="font-bold text-slate-900 text-xs uppercase tracking-wide flex items-center gap-1.5">
+                    <Award className="w-4 h-4 text-slate-500" />
+                    Your Assigned Teaching Competencies
+                  </h4>
+                  <span className="text-[9px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">
+                    {assignedCourses.length} Assigned
+                  </span>
+                </div>
 
-            <div className="flex flex-wrap gap-1.5">
-              {currentInstructor.courses.map((course, idx) => (
-                <span key={course} className="text-[10px] font-semibold bg-slate-100 text-slate-700 px-2.5 py-1 border border-slate-200 rounded-lg">
-                  {course} Approved
-                </span>
-              ))}
-            </div>
-            <button 
-              onClick={() => onNavigate('/instructor/competency')}
-              className="w-full py-1.5 border border-slate-200 hover:bg-slate-50 text-slate-600 text-[10px] font-bold rounded-lg transition-colors flex items-center justify-center gap-1"
-            >
-              Verify More Competencies <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {assignedCourses.length > 0 ? (
+                    assignedCourses.map((course) => (
+                      <span key={course} className="text-[10px] font-semibold bg-slate-100 text-slate-700 px-2.5 py-1 border border-slate-200 rounded-lg">
+                        {course}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-xs text-slate-400 italic">No course competencies assigned yet. Please contact your Center Administrator.</span>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
 
         </div>
 

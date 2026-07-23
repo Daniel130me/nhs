@@ -40,7 +40,7 @@ import {
   Sliders,
   User
 } from 'lucide-react';
-import { Instructor, Class, WeeklyLog, SystemConfig, Course, Lesson, Resource, ExamAttempt } from '../types';
+import { Instructor, Class, WeeklyLog, SystemConfig, Course, Lesson, Resource } from '../types';
 
 // Import newly created modular workspace subcomponents
 import InstructorDashboardView from './instructor/InstructorDashboardView';
@@ -56,8 +56,6 @@ interface InstructorPortalProps {
   classes: Class[];
   logs: WeeklyLog[];
   courses: Course[];
-  examAttempts: ExamAttempt[];
-  onAddExamAttempt: (attempt: ExamAttempt) => void;
   currentInstructor: Instructor | null;
   onLogin: (email: string, password?: string) => Promise<boolean>;
   onLogout: () => void;
@@ -74,8 +72,6 @@ export default function InstructorPortal({
   classes,
   logs,
   courses,
-  examAttempts,
-  onAddExamAttempt,
   currentInstructor,
   onLogin,
   onLogout,
@@ -137,7 +133,7 @@ export default function InstructorPortal({
     }
 
     return {
-      section: parts[1] || 'dashboard', // 'dashboard', 'classes', 'assignments', 'gradebook', 'resources', 'calendar', 'profile', 'competency'
+      section: parts[1] || 'dashboard', // 'dashboard', 'classes', 'assignments', 'gradebook', 'resources', 'calendar', 'profile'
       classId: parts[2] || null,
       subSection: parts[3] || null,
       queryParams
@@ -180,18 +176,6 @@ export default function InstructorPortal({
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
   const [videoPlaybackProgress, setVideoPlaybackProgress] = useState(0);
-
-  // Competency Exams (Original competency Tab) state
-  const [takingExamCourse, setTakingExamCourse] = useState<Course | null>(null);
-  const [examQuestions, setExamQuestions] = useState<any[]>([]);
-  const [examAnswers, setExamAnswers] = useState<Record<string, number>>({});
-  const [examTimer, setExamTimer] = useState<number>(1200);
-  const [examTimerInterval, setExamTimerInterval] = useState<any>(null);
-  const [isExamLoading, setIsExamLoading] = useState(false);
-  const [examLoadError, setExamLoadError] = useState('');
-  const [isExamGrading, setIsExamGrading] = useState(false);
-  const [gradedResult, setGradedResult] = useState<any | null>(null);
-  const [showGradedDetails, setShowGradedDetails] = useState(false);
 
   // ---- FETCH INTEGRATED DATABASE WORKSPACE STATES FOR DASHBOARD ----
   const [dbWeeklyLogs, setDbWeeklyLogs] = useState<any[]>([]);
@@ -477,105 +461,6 @@ export default function InstructorPortal({
     setActiveResourceLesson(lessonTitle);
     setIsVideoPlaying(true);
     setVideoPlaybackProgress(0);
-  };
-
-  // ---- AI EXAMS TESTING HANDLERS ----
-  const startCompetencyExam = async (course: Course) => {
-    setIsExamLoading(true);
-    setExamLoadError('');
-    setGradedResult(null);
-    setShowGradedDetails(false);
-
-    try {
-      const response = await fetch(`/api/exams/generate-exam`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ courseName: course.name })
-      });
-
-      if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.message || 'Failed to fetch certified exam.');
-      }
-
-      const resData = await response.json();
-      const payload = resData.data;
-
-      setTakingExamCourse(course);
-      setExamQuestions(payload.questions || []);
-      setExamAnswers({});
-      setExamTimer(1200);
-
-      if (examTimerInterval) clearInterval(examTimerInterval);
-      const interval = setInterval(() => {
-        setExamTimer(prev => {
-          if (prev <= 1) {
-            clearInterval(interval);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-      setExamTimerInterval(interval);
-
-    } catch (err: any) {
-      setExamLoadError(err.message || 'Failed to initialize testing environment.');
-    } finally {
-      setIsExamLoading(false);
-    }
-  };
-
-  const handleSelectExamAnswer = (questionId: string, index: number) => {
-    setExamAnswers(prev => ({
-      ...prev,
-      [questionId]: index
-    }));
-  };
-
-  const submitExamForGrading = async () => {
-    if (examTimerInterval) clearInterval(examTimerInterval);
-    setIsExamGrading(true);
-
-    try {
-      const formattedAnswers = Object.entries(examAnswers).map(([qId, index]) => ({
-        questionId: qId,
-        selectedIndex: index
-      }));
-
-      const response = await fetch(`/api/exams/grade-exam`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          courseName: takingExamCourse?.name,
-          answers: formattedAnswers
-        })
-      });
-
-      if (response.ok) {
-        const resData = await response.json();
-        const result = resData.data;
-        setGradedResult(result);
-
-        onAddExamAttempt({
-          id: `attempt-${Date.now()}`,
-          instructorId: currentInstructor?.id || '',
-          courseName: takingExamCourse?.name || '',
-          trialNumber: examAttempts.filter(e => e.courseName === takingExamCourse?.name).length + 1,
-          score: result.score,
-          passed: result.passed,
-          feedback: result.evaluativeFeedback || 'Evaluation complete.',
-          takenAt: new Date().toISOString()
-        });
-      } else {
-        const errData = await response.json();
-        alert(errData.message || 'LMS Grading offline.');
-      }
-    } catch (err) {
-      alert('Grading connection failed.');
-    } finally {
-      setIsExamGrading(false);
-      setTakingExamCourse(null);
-    }
   };
 
   // Render Login and Registration Screens if unauthorized
@@ -934,18 +819,6 @@ export default function InstructorPortal({
           </button>
 
           <button
-            onClick={() => navigateTo('/instructor/competency')}
-            className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl font-bold transition-all ${
-              section === 'competency' 
-                ? 'bg-red-500 text-white shadow-md' 
-                : 'hover:bg-slate-800 hover:text-white'
-            }`}
-          >
-            <Award className="w-4 h-4 shrink-0" />
-            AI Competency
-          </button>
-
-          <button
             onClick={() => navigateTo('/instructor/profile')}
             className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl font-bold transition-all ${
               section === 'profile' 
@@ -1087,9 +960,17 @@ export default function InstructorPortal({
                           onChange={(e) => setNewCourseName(e.target.value)}
                           className="w-full p-2 border border-slate-300 rounded-lg text-xs text-slate-800"
                         >
-                          {currentInstructor.courses.map((course) => (
-                            <option key={course} value={course}>{course}</option>
-                          ))}
+                          {(() => {
+                            const instCourses = Array.isArray(currentInstructor?.courses)
+                              ? currentInstructor.courses
+                              : (typeof currentInstructor?.courses === 'string'
+                                  ? (() => { try { const p = JSON.parse(currentInstructor.courses); return Array.isArray(p) ? p : [currentInstructor.courses]; } catch { return currentInstructor.courses ? [currentInstructor.courses] : []; } })()
+                                  : []);
+                            const optionsList = instCourses.length > 0 ? instCourses : config.courses.flatMap(c => c.items);
+                            return optionsList.map((course) => (
+                              <option key={course} value={course}>{course}</option>
+                            ));
+                          })()}
                         </select>
                       </div>
 
@@ -1574,164 +1455,6 @@ export default function InstructorPortal({
             </motion.div>
           )}
 
-          {/* PATH: /instructor/competency (AI Exams Evaluations) */}
-          {section === 'competency' && (
-            <motion.div
-              key="route-competency"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="space-y-6"
-            >
-              <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-                <h3 className="font-bold text-slate-900 text-sm">Instructor Competency Evaluations</h3>
-                <p className="text-[10px] text-slate-400 mt-1">Launch dynamic AI evaluations, check certification trial results, and log system credentials</p>
-              </div>
-
-              {examLoadError && (
-                <div className="p-3 bg-red-50 border border-red-200 text-red-800 rounded-lg text-xs flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
-                  <span>{examLoadError}</span>
-                </div>
-              )}
-
-              {/* THE EXAM SESSION CANVAS */}
-              {takingExamCourse && (
-                <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-md space-y-6">
-                  <div className="flex justify-between items-center border-b border-slate-100 pb-3">
-                    <div>
-                      <span className="text-[10px] font-extrabold text-red-500 uppercase tracking-wider block">AI Evaluator Active</span>
-                      <h4 className="text-xs font-bold text-slate-900 mt-0.5">Exam Certification: {takingExamCourse.name}</h4>
-                    </div>
-                    <div className="text-right">
-                      <span className="text-xs font-mono font-black text-red-500 block">
-                        Timer: {Math.floor(examTimer / 60)}:{(examTimer % 60).toString().padStart(2, '0')}
-                      </span>
-                    </div>
-                  </div>
-
-                  {isExamGrading ? (
-                    <div className="py-12 text-center space-y-4">
-                      <Loader2 className="w-10 h-10 text-red-500 animate-spin mx-auto" />
-                      <h4 className="font-bold text-slate-800 text-xs">Grading and compiling AI evaluation feedback...</h4>
-                      <p className="text-[10px] text-slate-400 max-w-xs mx-auto">Please wait while the Operations API validates scores against curriculum metrics.</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-6">
-                      {examQuestions.map((q, qidx) => (
-                        <div key={q.id} className="space-y-3 p-4 bg-slate-50 border border-slate-100 rounded-xl">
-                          <span className="text-xs font-extrabold text-slate-900 block">{qidx + 1}. {q.text}</span>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                            {q.options?.map((opt: string, oidx: number) => {
-                              const checked = examAnswers[q.id] === oidx;
-                              return (
-                                <button
-                                  key={oidx}
-                                  type="button"
-                                  onClick={() => handleSelectExamAnswer(q.id, oidx)}
-                                  className={`w-full flex items-center gap-2.5 p-2 text-left text-xs rounded-xl border transition-all cursor-pointer ${
-                                    checked 
-                                      ? 'bg-red-50 border-red-300 text-red-950 font-bold' 
-                                      : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
-                                  }`}
-                                >
-                                  <span className="w-5 h-5 rounded-full bg-slate-100 text-slate-600 font-bold text-[10px] flex items-center justify-center shrink-0">
-                                    {String.fromCharCode(65 + oidx)}
-                                  </span>
-                                  <span>{opt}</span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      ))}
-
-                      <div className="flex justify-end pt-4 border-t border-slate-100">
-                        <button
-                          onClick={submitExamForGrading}
-                          className="px-6 py-2 bg-red-500 hover:bg-red-600 text-white text-xs font-bold rounded-lg shadow-sm transition-all cursor-pointer"
-                        >
-                          Submit Answers for Grading
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* LATEST AI GRADE RESULTS */}
-              {gradedResult && (
-                <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-md space-y-4">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl shrink-0 border ${
-                      gradedResult.passed 
-                        ? 'bg-emerald-50 border-emerald-200 text-emerald-500 animate-bounce' 
-                        : 'bg-rose-50 border-rose-200 text-rose-500 animate-pulse'
-                    }`}>
-                      <Award className="w-6 h-6" />
-                    </div>
-                    <div>
-                      <h4 className="font-bold text-slate-900 text-xs uppercase tracking-wide">AI Graded Trial Complete</h4>
-                      <span className="text-[11px] text-slate-400 block mt-0.5">Evaluation Score: <strong className="text-slate-900">{gradedResult.score}%</strong> (Required 80% to certify)</span>
-                    </div>
-                  </div>
-
-                  <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl text-xs space-y-2">
-                    <span className="font-bold text-slate-800 block">System AI Feedback & Certification:</span>
-                    <p className="text-slate-600 leading-relaxed italic">"{gradedResult.evaluativeFeedback}"</p>
-                  </div>
-
-                  <button
-                    onClick={() => setGradedResult(null)}
-                    className="w-full py-1.5 border border-slate-200 hover:bg-slate-50 text-slate-600 text-xs font-bold rounded-lg"
-                  >
-                    Close Certification Screen
-                  </button>
-                </div>
-              )}
-
-              {/* CERTIFICATE BOARDS */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {courses.map(course => {
-                  const myAttempts = examAttempts.filter(e => e.courseName === course.name);
-                  const isCertified = myAttempts.some(e => e.passed);
-                  return (
-                    <div key={course.id} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4 flex flex-col justify-between">
-                      <div>
-                        <div className="flex justify-between items-start">
-                          <span className={`px-2.5 py-0.5 text-[9px] font-extrabold border rounded-full uppercase tracking-wider ${
-                            isCertified 
-                              ? 'bg-emerald-50 border-emerald-100 text-emerald-700' 
-                              : 'bg-slate-100 border-slate-200 text-slate-400'
-                          }`}>
-                            {isCertified ? '✓ Certified Syllabus' : 'Needs Certification'}
-                          </span>
-                        </div>
-                        <h4 className="font-bold text-slate-900 text-sm mt-3">{course.name}</h4>
-                        <p className="text-slate-400 text-xs mt-1 leading-normal">{course.description}</p>
-                      </div>
-
-                      <div className="mt-6 pt-4 border-t border-slate-100 flex justify-between items-center">
-                        <span className="text-[10px] text-slate-400 font-bold">Attempts: {myAttempts.length}/2 trials</span>
-                        {!isCertified && myAttempts.length < 2 && (
-                          <button
-                            onClick={() => startCompetencyExam(course)}
-                            className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-[10px] font-bold rounded-lg flex items-center gap-1 cursor-pointer transition-colors"
-                          >
-                            <Sparkles className="w-3.5 h-3.5 text-red-400 shrink-0 animate-pulse" /> Launch Exam
-                          </button>
-                        )}
-                        {isCertified && (
-                          <span className="text-emerald-600 font-extrabold text-[10px] bg-emerald-50 border border-emerald-100 px-2 py-1 rounded-lg">Approved to Teach</span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </motion.div>
-          )}
-
           {/* PATH: /instructor/profile (Original Settings Tab) */}
           {section === 'profile' && (
             <motion.div
@@ -1759,6 +1482,27 @@ export default function InstructorPortal({
                   <div>
                     <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide block">Assigned Center</span>
                     <span className="font-bold text-slate-900 block mt-1">{currentInstructor.center} Center</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide block mb-1.5">Assigned Teaching Competencies</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(() => {
+                        const instCourses = Array.isArray(currentInstructor?.courses)
+                          ? currentInstructor.courses
+                          : (typeof currentInstructor?.courses === 'string'
+                              ? (() => { try { const p = JSON.parse(currentInstructor.courses); return Array.isArray(p) ? p : [currentInstructor.courses]; } catch { return currentInstructor.courses ? [currentInstructor.courses] : []; } })()
+                              : []);
+                        return instCourses.length > 0 ? (
+                          instCourses.map((c) => (
+                            <span key={c} className="px-2.5 py-1 bg-slate-100 text-slate-800 text-[11px] font-semibold border border-slate-200 rounded-lg">
+                              {c}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-slate-400 italic text-[11px]">No competencies assigned yet</span>
+                        );
+                      })()}
+                    </div>
                   </div>
                 </div>
               </div>

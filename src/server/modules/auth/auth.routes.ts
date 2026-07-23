@@ -44,6 +44,20 @@ function getSha256(pwd: string): string {
   return crypto.createHash("sha256").update(pwd).digest("hex");
 }
 
+function parseCoursesArray(c: any): string[] {
+  if (Array.isArray(c)) return c;
+  if (typeof c === 'string') {
+    try {
+      const p = JSON.parse(c);
+      if (Array.isArray(p)) return p;
+      return [c];
+    } catch {
+      return c ? [c] : [];
+    }
+  }
+  return [];
+}
+
 // 1. PUBLIC INSTRUCTOR REGISTRATION
 router.post(
   "/register/instructor",
@@ -304,7 +318,7 @@ router.post(
             role: user.role,
             status: user.status,
             center: user.center,
-            courses: user.courses,
+            courses: parseCoursesArray(user.courses),
             createdAt: user.created_at,
             token,
           },
@@ -347,7 +361,7 @@ router.get(
       role: user.role,
       status: user.status,
       center: user.center,
-      courses: user.courses,
+      courses: parseCoursesArray(user.courses),
       createdAt: user.created_at,
     });
   })

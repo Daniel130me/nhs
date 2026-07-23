@@ -79,17 +79,6 @@ export interface Class {
   createdAt: string;
 }
 
-export interface ExamAttempt {
-  id: string;
-  instructorId: string;
-  courseName: string;
-  trialNumber: number; // 1 or 2
-  score: number; // e.g., 80
-  passed: boolean;
-  feedback: string;
-  takenAt: string;
-}
-
 export interface WeeklyLog {
   id: string;
   classId: string;

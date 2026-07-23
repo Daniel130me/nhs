@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ClipboardCheck, ShieldCheck, Info, Loader2 } from 'lucide-react';
-import { Instructor, Class, WeeklyLog, StudentSurvey as IStudentSurvey, SystemConfig, Course, ExamAttempt } from './types';
+import { Instructor, Class, WeeklyLog, StudentSurvey as IStudentSurvey, SystemConfig, Course } from './types';
 import { DEFAULT_CONFIG, SEED_INSTRUCTORS, SEED_CLASSES, SEED_LOGS, SEED_SURVEYS } from './data/seedData';
 import StudentSurvey from './components/StudentSurvey';
 import InstructorPortal from './components/InstructorPortal';
@@ -26,7 +26,6 @@ export default function App() {
   const [logs, setLogs] = useState<WeeklyLog[]>(SEED_LOGS);
   const [surveys, setSurveys] = useState<IStudentSurvey[]>(SEED_SURVEYS);
   const [courses, setCourses] = useState<Course[]>([]);
-  const [examAttempts, setExamAttempts] = useState<ExamAttempt[]>([]);
   const [isDbLoading, setIsDbLoading] = useState(true);
   const [isAuthChecking, setIsAuthChecking] = useState(true);
 
@@ -86,7 +85,7 @@ export default function App() {
             email: user.email,
             gender: user.gender || "Prefer not to say",
             center: user.center || "Headquarters",
-            courses: user.courses || [],
+            courses: Array.isArray(user.courses) ? user.courses : (typeof user.courses === 'string' ? (() => { try { const p = JSON.parse(user.courses); return Array.isArray(p) ? p : [user.courses]; } catch { return user.courses ? [user.courses] : []; } })() : []),
             role: (user.role === "ADMIN" || user.role === "SUPER_ADMIN") ? "Admin" : (user.role === "STUDENT" ? "Student" : "Instructor"),
             status: normalizeStatus(user.status),
             createdAt: user.createdAt || new Date().toISOString()
@@ -121,14 +120,13 @@ export default function App() {
     async function loadNeonState() {
       try {
         console.log("[App] Hydrating operational states from Neon Postgres server API...");
-        const [configRes, instRes, classesRes, logsRes, surveysRes, coursesRes, examAttemptsRes] = await Promise.all([
+        const [configRes, instRes, classesRes, logsRes, surveysRes, coursesRes] = await Promise.all([
           fetch("/api/config").then((r) => (r.ok ? r.json() : null)),
           fetch("/api/instructors").then((r) => (r.ok ? r.json() : null)),
           fetch("/api/classes").then((r) => (r.ok ? r.json() : null)),
           fetch("/api/logs").then((r) => (r.ok ? r.json() : null)),
           fetch("/api/surveys").then((r) => (r.ok ? r.json() : null)),
-          fetch("/api/courses").then((r) => (r.ok ? r.json() : null)),
-          fetch("/api/exam-attempts").then((r) => (r.ok ? r.json() : null))
+          fetch("/api/courses").then((r) => (r.ok ? r.json() : null))
         ]);
 
         const configData = configRes?.data || configRes;
@@ -137,7 +135,6 @@ export default function App() {
         const logsData = logsRes?.data || logsRes;
         const surveysData = surveysRes?.data || surveysRes;
         const coursesData = coursesRes?.data || coursesRes;
-        const examAttemptsData = examAttemptsRes?.data || examAttemptsRes;
 
         if (configData && configData.centers) setConfig(configData);
         if (Array.isArray(instData) && instData.length > 0) setInstructors(instData);
@@ -145,7 +142,6 @@ export default function App() {
         if (Array.isArray(logsData) && logsData.length > 0) setLogs(logsData);
         if (Array.isArray(surveysData) && surveysData.length > 0) setSurveys(surveysData);
         if (Array.isArray(coursesData) && coursesData.length > 0) setCourses(coursesData);
-        if (Array.isArray(examAttemptsData) && examAttemptsData.length > 0) setExamAttempts(examAttemptsData);
       } catch (err) {
         console.error("Neon Postgres synchronization failed. Standard memory cache used.", err);
       } finally {
@@ -184,7 +180,7 @@ export default function App() {
         email: user.email,
         gender: user.gender || "Prefer not to say",
         center: user.center || "Headquarters",
-        courses: user.courses || [],
+        courses: Array.isArray(user.courses) ? user.courses : (typeof user.courses === 'string' ? (() => { try { const p = JSON.parse(user.courses); return Array.isArray(p) ? p : [user.courses]; } catch { return user.courses ? [user.courses] : []; } })() : []),
         role: (user.role === "ADMIN" || user.role === "SUPER_ADMIN") ? "Admin" : (user.role === "STUDENT" ? "Student" : "Instructor"),
         status: normalizeStatus(user.status),
         createdAt: user.createdAt || new Date().toISOString()
@@ -654,20 +650,6 @@ export default function App() {
     }
   };
 
-  const handleAddExamAttempt = async (attempt: ExamAttempt) => {
-    setExamAttempts((prev) => [...prev, attempt]);
-
-    try {
-      await fetch("/api/exam-attempts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(attempt)
-      });
-    } catch (err) {
-      console.error("Failed to record competency exam attempt in Neon DB:", err);
-    }
-  };
-
   const handleUpdateInstructorStatus = async (id: string, newStatus: 'Active' | 'Deactivated') => {
     setInstructors((prev) =>
       prev.map((inst) => (inst.id === id ? { ...inst, status: newStatus } : inst))
@@ -806,7 +788,6 @@ export default function App() {
                       logs={logs}
                       surveys={surveys}
                       courses={courses}
-                      examAttempts={examAttempts}
                       onAddCenter={handleAddCenter}
                       onAddCourse={handleAddCourse}
                       onCreateClass={handleCreateClassForAdmin}
@@ -829,8 +810,6 @@ export default function App() {
                     classes={classes}
                     logs={logs}
                     courses={courses}
-                    examAttempts={examAttempts}
-                    onAddExamAttempt={handleAddExamAttempt}
                     currentInstructor={currentInstructor}
                     onLogin={handleLogin}
                     onLogout={handleLogout}

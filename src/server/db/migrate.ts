@@ -682,6 +682,12 @@ const MIGRATIONS: Migration[] = [
       `UPDATE instructors SET status = 'Pending' WHERE status = 'Deactivated' OR status IS NULL;`,
       `UPDATE users SET status = 'PENDING' WHERE role = 'INSTRUCTOR' AND status = 'SUSPENDED';`
     ]
+  },
+  {
+    id: "017_drop_exam_attempts_table",
+    queries: [
+      `DROP TABLE IF EXISTS exam_attempts CASCADE;`
+    ]
   }
 ];
 

@@ -36,7 +36,7 @@ import {
   ChevronUp,
   FileSpreadsheet
 } from 'lucide-react';
-import { Instructor, Class, WeeklyLog, StudentSurvey, SystemConfig, Course, Lesson, Resource, ExamAttempt } from '../types';
+import { Instructor, Class, WeeklyLog, StudentSurvey, SystemConfig, Course, Lesson, Resource } from '../types';
 import FileUploader from './FileUploader';
 import AdminReportsTab from './AdminReportsTab';
 
@@ -47,7 +47,6 @@ interface AdminDashboardProps {
   logs: WeeklyLog[];
   surveys: StudentSurvey[];
   courses: Course[];
-  examAttempts: ExamAttempt[];
   onAddCenter: (center: string) => void;
   onAddCourse: (category: string, course: string) => void;
   onCreateClass: (newClass: Omit<Class, 'id' | 'createdAt'>) => void;
@@ -66,7 +65,6 @@ export default function AdminDashboard({
   logs,
   surveys,
   courses,
-  examAttempts,
   onAddCenter,
   onAddCourse,
   onCreateClass,
@@ -591,8 +589,8 @@ export default function AdminDashboard({
     }
   };
 
-  // Sub-tab under Operations configuration: 'classes' | 'courses' | 'centers' | 'exams'
-  const [opsSection, setOpsSection] = useState<'classes' | 'courses' | 'centers' | 'exams'>('classes');
+  // Sub-tab under Operations configuration: 'classes' | 'courses' | 'centers'
+  const [opsSection, setOpsSection] = useState<'classes' | 'courses' | 'centers'>('classes');
 
   // ---- CLASS CRUD FORM STATES ----
   const [showClassForm, setShowClassForm] = useState(false);
@@ -1968,14 +1966,6 @@ export default function AdminDashboard({
               >
                 Centers Setup
               </button>
-              <button
-                onClick={() => setOpsSection('exams')}
-                className={`px-5 py-2.5 text-xs font-bold transition-all cursor-pointer border-b-2 -mb-px ${
-                  opsSection === 'exams' ? 'border-red-500 text-red-600' : 'border-transparent text-slate-500 hover:text-slate-800'
-                }`}
-              >
-                Competency Exams ({examAttempts.length})
-              </button>
             </div>
 
             {configSuccess && (
@@ -2678,56 +2668,7 @@ export default function AdminDashboard({
               </div>
             )}
 
-            {/* SECTION 4: INSTRUCTOR EVALUATION COMPETE CY EXAM LOGS */}
-            {opsSection === 'exams' && (
-              <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
-                <div>
-                  <h3 className="font-bold font-display text-slate-900 text-sm">Instructor Competency Evaluation History</h3>
-                  <p className="text-slate-500 text-xs">Review formal Gemini AI generated and graded evaluation outcomes. Pass threshold is strictly 70% with 2 trial attempts.</p>
-                </div>
 
-                {examAttempts.length === 0 ? (
-                  <div className="text-center py-12 text-slate-400 text-xs">No instructor competency exams logged in system yet. Instructors take exams inside their Staff Portal.</div>
-                ) : (
-                  <div className="space-y-4">
-                    {examAttempts.map((attempt) => {
-                      const instructor = instructors.find(i => i.id === attempt.instructorId);
-                      return (
-                        <div key={attempt.id} className={`border rounded-xl p-4 bg-slate-50/50 space-y-3 border-l-4 ${
-                          attempt.passed ? 'border-l-emerald-500 border-slate-200' : 'border-l-red-500 border-slate-200'
-                        }`}>
-                          <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
-                            <div>
-                              <span className="text-[9px] text-slate-400 font-bold block">Trial Attempt Log</span>
-                              <span className="font-bold text-slate-800 text-xs">
-                                Instructor: {instructor ? `${instructor.firstName} ${instructor.lastName}` : 'Instructor'} ({instructor?.email})
-                              </span>
-                              <p className="text-[11px] text-slate-600 mt-1 font-medium">Evaluation Course: {attempt.courseName}</p>
-                            </div>
-                            <div className="text-left sm:text-right">
-                              <span className={`inline-block text-[10px] font-black tracking-wider uppercase px-2 py-0.5 rounded ${
-                                attempt.passed ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-red-100 text-red-800 border border-red-200'
-                              }`}>
-                                {attempt.passed ? 'Passed (✓ Competent)' : 'Failed (✗ Not Certified)'}
-                              </span>
-                              <p className="text-xs font-bold text-slate-800 mt-1">Score: {attempt.score}%</p>
-                              <span className="text-[9px] text-slate-400 block">Trial Attempt: {attempt.trialNumber} of 2</span>
-                            </div>
-                          </div>
-
-                          <div className="bg-white border border-slate-100 rounded-lg p-3 text-xs text-slate-600 italic leading-relaxed">
-                            <strong className="text-slate-800 block not-italic mb-1">AI Assessor Mentor Feedback:</strong>
-                            "{attempt.feedback}"
-                          </div>
-                          
-                          <p className="text-[9px] text-slate-400 text-right">Taken on: {new Date(attempt.takenAt).toLocaleString()}</p>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -2999,7 +2940,7 @@ export default function AdminDashboard({
                     <div className="flex gap-2 items-start text-[11px] text-slate-600">
                       <span className="w-1.5 h-1.5 bg-slate-400 rounded-full mt-1.5 shrink-0" />
                       <div>
-                        <span className="font-semibold block text-slate-800">Competency Verification Checklist</span>
+                        <span className="font-semibold block text-slate-800">Qualifications & Assigned Courses Checklist</span>
                         <span className="text-slate-400 text-[9px] block">Assigned and calibrated by centers coordinator</span>
                       </div>
                     </div>

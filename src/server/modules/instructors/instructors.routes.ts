@@ -7,6 +7,20 @@ import { requireActiveUser, requireAdmin } from "../../middleware/auth";
 
 const router = Router();
 
+const parseCoursesArray = (c: any) => {
+  if (Array.isArray(c)) return c;
+  if (typeof c === 'string') {
+    try {
+      const p = JSON.parse(c);
+      if (Array.isArray(p)) return p;
+      return [c];
+    } catch {
+      return c ? [c] : [];
+    }
+  }
+  return [];
+};
+
 router.get("/", requireActiveUser, asyncHandler(async (req, res) => {
   const instructors = await query("SELECT * FROM instructors WHERE deleted_at IS NULL ORDER BY created_at DESC");
   const formatted = instructors.map(inst => ({
@@ -16,7 +30,7 @@ router.get("/", requireActiveUser, asyncHandler(async (req, res) => {
     email: inst.email,
     gender: inst.gender,
     center: inst.center,
-    courses: inst.courses,
+    courses: parseCoursesArray(inst.courses),
     role: inst.role,
     status: inst.status || 'Active',
     createdAt: inst.created_at
