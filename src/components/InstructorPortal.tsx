@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import ProfileForm from './ProfileForm';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   LogIn,
@@ -802,7 +803,7 @@ export default function InstructorPortal({
   }
 
   // Pending activation check
-  if (currentInstructor.status !== 'Active') {
+  if (currentInstructor.status?.toUpperCase() !== 'ACTIVE') {
     return (
       <div className="max-w-md mx-auto my-12 bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden p-8 text-center space-y-6">
         <div className="w-16 h-16 bg-amber-50 border border-amber-200 text-amber-500 rounded-2xl flex items-center justify-center text-2xl mx-auto">
@@ -1762,70 +1763,9 @@ export default function InstructorPortal({
                 </div>
               </div>
 
-              {/* Password Management */}
-              <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
-                <div className="border-b border-slate-100 pb-3 flex items-center gap-2">
-                  <Lock className="w-4 h-4 text-slate-500" />
-                  <h4 className="font-black text-slate-900 text-xs uppercase tracking-wider font-display">Security Credentials</h4>
-                </div>
-
-                {passwordError && (
-                  <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-lg text-xs flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
-                    <span>{passwordError}</span>
-                  </div>
-                )}
-
-                {passwordSuccess && (
-                  <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg text-xs flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-                    <span>{passwordSuccess}</span>
-                  </div>
-                )}
-
-                <form onSubmit={handlePasswordChangeSubmit} className="space-y-4">
-                  <div>
-                    <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wide mb-1">Current Password</label>
-                    <input
-                      type="password"
-                      required
-                      placeholder="••••••••"
-                      value={currentPasswordChange}
-                      onChange={(e) => setCurrentPasswordChange(e.target.value)}
-                      className="w-full p-2 border border-slate-300 rounded-lg text-xs text-slate-800 focus:outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wide mb-1">New Secure Password</label>
-                    <input
-                      type="password"
-                      required
-                      placeholder="At least 6 characters"
-                      value={newPasswordChange}
-                      onChange={(e) => setNewPasswordChange(e.target.value)}
-                      className="w-full p-2 border border-slate-300 rounded-lg text-xs text-slate-800 focus:outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wide mb-1">Confirm Password</label>
-                    <input
-                      type="password"
-                      required
-                      placeholder="••••••••"
-                      value={confirmPasswordChange}
-                      onChange={(e) => setConfirmPasswordChange(e.target.value)}
-                      className="w-full p-2 border border-slate-300 rounded-lg text-xs text-slate-800 focus:outline-none"
-                    />
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={isPasswordLoading}
-                    className="w-full py-2 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-500 text-white text-xs font-bold rounded-lg transition-all"
-                  >
-                    {isPasswordLoading ? 'Transmitting...' : 'Update Portal Password'}
-                  </button>
-                </form>
+              
+              <div>
+                <ProfileForm />
               </div>
             </motion.div>
           )}

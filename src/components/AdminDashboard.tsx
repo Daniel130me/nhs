@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import ProfileForm from "./ProfileForm";
 import { motion, AnimatePresence } from 'motion/react';
 import {
   ShieldCheck,
@@ -87,7 +88,7 @@ export default function AdminDashboard({
   const [severityFilter, setSeverityFilter] = useState('All');
 
   // Sub-tabs for the Admin portal
-  const [adminTab, setAdminTab] = useState<'Analytics' | 'Instructors' | 'Students' | 'Surveys' | 'InstructorLogs' | 'Config' | 'Reports'>('Analytics');
+  const [adminTab, setAdminTab] = useState<'Analytics' | 'Instructors' | 'Students' | 'Surveys' | 'InstructorLogs' | 'Config' | 'Reports' | 'Profile'>('Analytics');
 
   // Students administration states
   const [dbStudents, setDbStudents] = useState<any[]>([]);
@@ -213,6 +214,38 @@ export default function AdminDashboard({
     } catch (err: any) {
       alert(err.message || 'Failed to re-invite student');
     }
+  };
+
+  const handleDeleteStudent = async (id: string, firstName: string, lastName: string) => {
+    setConfirmationModal({
+      isOpen: true,
+      title: "Delete Student Account",
+      message: `Are you sure you want to permanently delete ${firstName} ${lastName}? This action cannot be undone and will remove their access.`,
+      onConfirm: async () => {
+        try {
+          const token = localStorage.getItem('nhs_token');
+          const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+          if (token) headers['Authorization'] = `Bearer ${token}`;
+
+          const res = await fetch(`/api/v1/admin/students/${id}`, {
+            method: 'DELETE',
+            headers
+          });
+
+          if (!res.ok) {
+            const data = await res.json();
+            throw new Error(data.message || 'Failed to delete student');
+          }
+
+          alert("Student deleted successfully!");
+          fetchAdminStudents();
+        } catch (err: any) {
+          alert(err.message || 'Failed to delete student');
+        } finally {
+          setConfirmationModal(null);
+        }
+      }
+    });
   };
 
   const handleToggleStudentStatus = async (id: string, currentStatus: string) => {
@@ -1561,7 +1594,14 @@ export default function AdminDashboard({
                               onClick={() => handleReinviteStudent(stu.id)}
                               className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-[11px] rounded-lg transition-all cursor-pointer"
                             >
-                              Regenerate Invite
+                              Reset Password
+                            </button>
+
+                            <button
+                              onClick={() => handleDeleteStudent(stu.id, stu.firstName, stu.lastName)}
+                              className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold text-[11px] rounded-lg transition-all cursor-pointer inline-flex items-center gap-1"
+                            >
+                              <Trash2 className="w-3 h-3" />
                             </button>
                           </td>
                         </tr>
@@ -1879,6 +1919,17 @@ export default function AdminDashboard({
             exit={{ opacity: 0, y: -10 }}
           >
             <AdminReportsTab config={config} classes={classes} />
+          </motion.div>
+        )}
+
+        {adminTab === 'Profile' && (
+          <motion.div
+            key="profile-tab"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+          >
+            <ProfileForm />
           </motion.div>
         )}
 

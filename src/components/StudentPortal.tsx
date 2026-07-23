@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
+import ProfileForm from './ProfileForm';
 import { 
-  BookOpen, Calendar, CheckCircle2, Clock, AlertTriangle, 
+  User, BookOpen, Calendar, CheckCircle2, Clock, AlertTriangle, 
   FileText, Link as LinkIcon, Send, Save, RefreshCw, 
   ChevronRight, Award, HelpCircle, Loader2, LogOut, ArrowLeft, UploadCloud, Trash2,
   Bell, LifeBuoy, Shield, MessageSquare, Plus, Check, Info, AlertCircle, ThumbsUp
@@ -84,7 +85,7 @@ export default function StudentPortal({ currentStudent, onLogout }: StudentPorta
   const [gradebook, setGradebook] = useState<Gradebook | null>(null);
 
   // Top-level Student Navigation Tabs
-  const [activeTab, setActiveTab] = useState<'classes' | 'campaigns' | 'support' | 'notifications' | 'certificates'>('classes');
+  const [activeTab, setActiveTab] = useState<'classes' | 'campaigns' | 'support' | 'notifications' | 'certificates' | 'profile'>('classes');
 
   // Backend Integration States
   const [notifications, setNotifications] = useState<any[]>([]);
@@ -637,6 +638,15 @@ export default function StudentPortal({ currentStudent, onLogout }: StudentPorta
           >
             <Award className="w-4 h-4" />
             My Certificates
+          </button>
+          <button
+            onClick={() => { setActiveTab('profile'); }}
+            className={`pb-3 text-xs font-bold border-b-2 transition-all cursor-pointer flex items-center gap-2 px-1 ${
+              activeTab === 'profile' ? 'border-red-500 text-red-600 font-extrabold' : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <User className="w-4 h-4" />
+            My Profile
           </button>
         </div>
       </div>
@@ -1806,6 +1816,10 @@ export default function StudentPortal({ currentStudent, onLogout }: StudentPorta
                 ))}
               </div>
             )}
+          </div>
+        ) : activeTab === 'profile' ? (
+          <div className="space-y-6">
+            <ProfileForm />
           </div>
         ) : (
           /* NOTIFICATIONS CENTER HUB */
